@@ -11,12 +11,7 @@ class JournalService
      * === PEMBELIAN (KOMPATIBILITAS VERSI LAMA) ===
      * Dr 1201 Persediaan | Cr 1101 Kas (jika $cash = true) ATAU Cr 2101 Hutang (jika $cash = false)
      *
-     * Sekarang diarahkan ke skema baru:
-     * - Jika $cash = true  → dianggap dibayar penuh (cashPaid = amount, payableRemain = 0)
-     * - Jika $cash = false → dianggap kredit penuh (cashPaid = 0, payableRemain = amount)
-     *
-     * Rekomendasi baru: panggil postPurchaseSplit() langsung dari controller
-     * dengan parameter grand total & jumlah bayar.
+     * Rekomendasi baru: panggil postPurchaseSplit() langsung dari controller.
      */
     public function postPurchase(string $refCode, string $date, float $amount, bool $cash = false, ?string $memo = null): void
     {
@@ -43,8 +38,6 @@ class JournalService
      * Dr 1201 Persediaan (inventoryAmount)
      * Cr 1101/1102 Kas/Bank (cashPaid, jika >0)
      * Cr 2101 Hutang Dagang (payableRemain, jika >0)
-     *
-     * $cashAccountNote opsional hanya untuk memberi label pada nama akun kas/bank di catatan.
      */
     public function postPurchaseSplit(
         string $refCode,
@@ -61,19 +54,20 @@ class JournalService
 
         $dateObj = Carbon::parse($date);
         $dateStr = $dateObj->toDateString();
-        $prefix = 'JRN-' . $dateObj->format('Ymd') . '-';
 
-        // Akun dari tabel accounts
-        $accPersediaan = DB::table('accounts')->where('code', '1201')->first(); // Persediaan Bahan
-        $accCash = DB::table('accounts')->where('code', '1101')->first(); // Kas
-        $accBank = DB::table('accounts')->where('code', '1102')->first(); // Bank (opsional)
-        $accAP = DB::table('accounts')->where('code', '2101')->first(); // Hutang Dagang
+        // === UBAH DI SINI: JRN-YYMMDD- ===
+        $prefix = 'JRN-' . $dateObj->format('ymd') . '-';
+
+        // Akun
+        $accPersediaan = DB::table('accounts')->where('code', '1201')->first();
+        $accCash = DB::table('accounts')->where('code', '1101')->first();
+        $accBank = DB::table('accounts')->where('code', '1102')->first();
+        $accAP = DB::table('accounts')->where('code', '2101')->first();
 
         if (!$accPersediaan || !$accAP) {
             throw new \RuntimeException('Akun 1201/2101 belum ada. Seed AccountSeeder dulu.');
         }
 
-        // Pilih akun kas/bank untuk kredit pembayaran (prioritas Bank lalu Kas)
         $creditCashAccountId = $accBank->id ?? $accCash->id ?? null;
 
         $autoMemo = sprintf(
@@ -87,7 +81,7 @@ class JournalService
 
         $lines = [];
 
-        // Dr Persediaan (full)
+        // Dr Persediaan
         $lines[] = [
             'account_id' => $accPersediaan->id,
             'debit' => $inventoryAmount,
@@ -95,7 +89,7 @@ class JournalService
             'note' => 'Persediaan bertambah dari pembelian',
         ];
 
-        // Cr Kas/Bank jika ada pembayaran saat ini
+        // Cr Kas/Bank jika bayar
         if ($cashPaid > 0) {
             if (!$creditCashAccountId) {
                 throw new \RuntimeException('Akun kas/bank (1101/1102) belum tersedia.');
@@ -104,6 +98,7 @@ class JournalService
             if ($cashAccountNote) {
                 $note .= " ({$cashAccountNote})";
             }
+
             $lines[] = [
                 'account_id' => $creditCashAccountId,
                 'debit' => 0,
@@ -112,7 +107,7 @@ class JournalService
             ];
         }
 
-        // Cr Hutang jika ada sisa
+        // Cr Hutang jika sisa
         if ($payableRemain > 0) {
             $lines[] = [
                 'account_id' => $accAP->id,
@@ -125,16 +120,7 @@ class JournalService
         $this->postBalanced($prefix, $dateStr, $refCode, $memo, $lines);
     }
 
-    /**
-     * === PEMBAYARAN HUTANG PEMBELIAN (DP/Termin) ===
-     * Dr 2101 Hutang Dagang | Cr (1101 Kas / 1102 Bank) sesuai method
-     *
-     * @param string $method cash|bank|transfer|other
-     *   - cash     -> 1101 (Kas)
-     *   - bank     -> 1102 (Bank)
-     *   - transfer -> 1102 (Bank)
-     *   - other    -> 1101 (fallback Kas)
-     */
+    /** === PEMBAYARAN HUTANG PEMBELIAN (DP/Termin) === */
     public function postPaymentPurchase(string $refCode, string $date, float $amount, string $method = 'cash', ?string $memo = null): void
     {
         if ($amount <= 0) {
@@ -143,17 +129,17 @@ class JournalService
 
         $dateObj = Carbon::parse($date);
         $dateStr = $dateObj->toDateString();
-        $prefix = 'JRN-' . $dateObj->format('Ymd') . '-';
+        // === UBAH DI SINI: JRN-YYMMDD- ===
+        $prefix = 'JRN-' . $dateObj->format('ymd') . '-';
 
-        $accAP = DB::table('accounts')->where('code', '2101')->first(); // Hutang Dagang
-        $accCash = DB::table('accounts')->where('code', '1101')->first(); // Kas
-        $accBank = DB::table('accounts')->where('code', '1102')->first(); // Bank (opsional)
+        $accAP = DB::table('accounts')->where('code', '2101')->first();
+        $accCash = DB::table('accounts')->where('code', '1101')->first();
+        $accBank = DB::table('accounts')->where('code', '1102')->first();
 
         if (!$accAP) {
             throw new \RuntimeException('Akun 2101 (Hutang Dagang) belum ada.');
         }
 
-        // Tentukan akun kredit (kas/bank) berdasar method
         $method = strtolower($method);
         $creditAccountId = match ($method) {
             'bank', 'transfer' => ($accBank?->id ?? $accCash?->id),
@@ -165,36 +151,18 @@ class JournalService
             throw new \RuntimeException('Akun kas/bank (1101/1102) belum tersedia.');
         }
 
-        $autoMemo = sprintf(
-            'Pembayaran pembelian %s sebesar Rp %s',
-            $refCode,
-            number_format($amount, 0, ',', '.')
-        );
+        $autoMemo = sprintf('Pembayaran pembelian %s sebesar Rp %s', $refCode, number_format($amount, 0, ',', '.'));
         $memo = $memo ? mb_strimwidth($memo, 0, 255, '…', 'UTF-8') : $autoMemo;
 
-        // Dr Hutang (2101), Cr Kas/Bank (1101/1102)
         $lines = [
-            [
-                'account_id' => $accAP->id,
-                'debit' => $amount,
-                'credit' => 0,
-                'note' => 'Pelunasan/DP hutang pembelian',
-            ],
-            [
-                'account_id' => $creditAccountId,
-                'debit' => 0,
-                'credit' => $amount,
-                'note' => 'Kas/Bank keluar untuk pembayaran pembelian',
-            ],
+            ['account_id' => $accAP->id, 'debit' => $amount, 'credit' => 0, 'note' => 'Pelunasan/DP hutang pembelian'],
+            ['account_id' => $creditAccountId, 'debit' => 0, 'credit' => $amount, 'note' => 'Kas/Bank keluar untuk pembayaran pembelian'],
         ];
 
         $this->postBalanced($prefix, $dateStr, $refCode, $memo, $lines);
     }
 
-    /**
-     * === REVERSAL PEMBAYARAN (saat hapus PurchasePayment) ===
-     * Dr Kas/Bank (1101/1102) | Cr Hutang (2101)
-     */
+    /** === REVERSAL PEMBAYARAN === */
     public function reversePaymentPurchase(string $refCode, string $date, float $amount, string $method = 'cash', ?string $memo = null): void
     {
         if ($amount <= 0) {
@@ -203,11 +171,12 @@ class JournalService
 
         $dateObj = Carbon::parse($date);
         $dateStr = $dateObj->toDateString();
-        $prefix = 'JRN-' . $dateObj->format('Ymd') . '-';
+        // === UBAH DI SINI: JRN-YYMMDD- ===
+        $prefix = 'JRN-' . $dateObj->format('ymd') . '-';
 
-        $accAP = DB::table('accounts')->where('code', '2101')->first(); // Hutang Dagang
-        $accCash = DB::table('accounts')->where('code', '1101')->first(); // Kas
-        $accBank = DB::table('accounts')->where('code', '1102')->first(); // Bank
+        $accAP = DB::table('accounts')->where('code', '2101')->first();
+        $accCash = DB::table('accounts')->where('code', '1101')->first();
+        $accBank = DB::table('accounts')->where('code', '1102')->first();
 
         if (!$accAP) {
             throw new \RuntimeException('Akun 2101 (Hutang Dagang) belum ada.');
@@ -224,27 +193,12 @@ class JournalService
             throw new \RuntimeException('Akun kas/bank (1101/1102) belum tersedia.');
         }
 
-        $autoMemo = sprintf(
-            'Reversal pembayaran pembelian %s sebesar Rp %s',
-            $refCode,
-            number_format($amount, 0, ',', '.')
-        );
+        $autoMemo = sprintf('Reversal pembayaran pembelian %s sebesar Rp %s', $refCode, number_format($amount, 0, ',', '.'));
         $memo = $memo ? mb_strimwidth($memo, 0, 255, '…', 'UTF-8') : $autoMemo;
 
-        // Dr Kas/Bank, Cr Hutang
         $lines = [
-            [
-                'account_id' => $debitAccountId,
-                'debit' => $amount,
-                'credit' => 0,
-                'note' => 'Reversal pembayaran pembelian (kas/bank kembali)',
-            ],
-            [
-                'account_id' => $accAP->id,
-                'debit' => 0,
-                'credit' => $amount,
-                'note' => 'Reversal: hutang bertambah kembali',
-            ],
+            ['account_id' => $debitAccountId, 'debit' => $amount, 'credit' => 0, 'note' => 'Reversal pembayaran pembelian (kas/bank kembali)'],
+            ['account_id' => $accAP->id, 'debit' => 0, 'credit' => $amount, 'note' => 'Reversal: hutang bertambah kembali'],
         ];
 
         $this->postBalanced($prefix, $dateStr, $refCode, $memo, $lines);
@@ -252,12 +206,13 @@ class JournalService
 
     /**
      * Helper: Insert journal entry + lines & guard balance.
-     * Menghasilkan kode JRN-YYYYMMDD-###
+     * Menghasilkan kode JRN-YYMMDD-£££
      */
     protected function postBalanced(string $prefix, string $dateStr, string $refCode, ?string $memo, array $lines): void
     {
         DB::transaction(function () use ($prefix, $dateStr, $refCode, $memo, $lines) {
             $seq = $this->nextSeq($prefix);
+            // 3 digit sesuai £££
             $jrCode = $prefix . str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
 
             $jrId = DB::table('journal_entries')->insertGetId([
@@ -298,7 +253,7 @@ class JournalService
     }
 
     /**
-     * Penomoran sequence JRN-YYYYMMDD-###
+     * Penomoran sequence JRN-YYMMDD-£££
      */
     protected function nextSeq(string $prefix): int
     {
