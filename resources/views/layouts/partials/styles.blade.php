@@ -1,5 +1,53 @@
 <style>
     :root {
+        /* === Warna dasar tema (dark-friendly & soft contrast) === */
+        --bg: color-mix(in srgb, #0d1117 8%, #ffffff 92%);
+        --fg: color-mix(in srgb, #000 90%, #fff 10%);
+        --card: color-mix(in srgb, var(--bg) 96%, var(--bs-primary) 4%);
+        --line: color-mix(in srgb, var(--bs-border-color) 78%, var(--bg) 22%);
+        --muted: color-mix(in srgb, var(--fg) 60%, var(--bg) 40%);
+
+        /* === Aksen sistem === */
+        --in: var(--bs-teal);
+        --out: var(--bs-orange);
+        --accent: var(--bs-primary);
+
+        /* === Tipografi === */
+        --radius: 14px;
+        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        transition: background .2s, color .2s;
+    }
+
+    .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        transition: background .2s, border-color .2s;
+    }
+
+    .btn-ghost {
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--fg);
+    }
+
+    .muted {
+        color: var(--muted);
+    }
+
+    .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+    }
+
+    :root {
         --bg: #fff;
         --fg: #0f172a;
         --muted: #64748b;

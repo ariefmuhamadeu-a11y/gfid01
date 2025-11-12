@@ -6,26 +6,32 @@
         :root {
             --in: var(--bs-teal);
             --out: var(--bs-orange);
+            --radius: 14px;
         }
 
-        /* ===== Layout dasar ikut tema ===== */
-        body {
-            background: var(--bg);
-            color: var(--fg);
+        /* ===== Wrap agar identik dengan Purchasing ===== */
+        .wrap {
+            max-width: 1100px;
+            margin-inline: auto;
         }
 
+        /* ===== Komponen dasar ikut tema global dari layouts.app ===== */
         .card,
         .kpi-bar,
         .header-wrap {
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: var(--radius);
             background: var(--card);
-            transition: background .2s, color .2s;
+            transition: background .2s, color .2s, border-color .2s;
         }
 
         .mono {
             font-variant-numeric: tabular-nums;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+        }
+
+        .muted {
+            color: var(--muted);
         }
 
         /* ===== KPI BAR ===== */
@@ -34,7 +40,7 @@
             border-radius: 12px;
             padding: .7rem .9rem;
             height: 100%;
-            background: color-mix(in srgb, var(--brand) 4%, var(--card) 96%);
+            background: color-mix(in srgb, var(--bs-primary) 4%, var(--card) 96%);
         }
 
         .kpi-label {
@@ -47,13 +53,33 @@
 
         .kpi-value {
             font-size: 1.2rem;
-            font-weight: 700;
+            font-weight: 700
+        }
+
+        .qty-ok {
+            color: var(--bs-teal);
+            font-weight: 700
+        }
+
+        .qty-low {
+            color: var(--bs-blue);
+            font-weight: 700
+        }
+
+        .qty-zero {
+            color: var(--muted);
+            font-weight: 700
+        }
+
+        .qty-neg {
+            color: var(--bs-red);
+            font-weight: 700
         }
 
         /* ===== HEADER FILTER ===== */
         .header-wrap {
             padding: .9rem 1rem;
-            background: color-mix(in srgb, var(--brand) 5%, var(--card) 95%);
+            background: color-mix(in srgb, var(--bs-primary) 5%, var(--card) 95%)
         }
 
         #miniFilter .form-control,
@@ -69,11 +95,11 @@
             position: absolute;
             top: 8px;
             left: 10px;
-            color: var(--muted);
+            color: var(--muted)
         }
 
         .with-ico {
-            padding-left: 1.6rem;
+            padding-left: 1.6rem
         }
 
         .btn-export {
@@ -84,54 +110,57 @@
             align-items: center;
             gap: .5rem;
             min-height: 34px;
-            transition: all .15s ease;
             color: var(--fg);
+            transition: all .15s ease;
         }
 
         .btn-export:hover {
-            background: color-mix(in srgb, var(--brand) 6%, var(--card) 94%);
+            background: color-mix(in srgb, var(--bs-primary) 6%, var(--card) 94%)
         }
 
         .dropdown-menu {
             border-radius: 12px;
             border: 1px solid var(--line);
             background: var(--card);
-            color: var(--fg);
+            color: var(--fg)
         }
 
         /* ===== TABLE ===== */
         .table-items {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: collapse
         }
 
         .table-items th,
         .table-items td {
             padding: .7rem .85rem;
             border-bottom: 1px solid var(--line);
-            vertical-align: middle;
+            vertical-align: middle
         }
 
         .table-items th {
-            background: color-mix(in srgb, var(--brand) 8%, var(--card) 92%);
+            background: color-mix(in srgb, var(--bs-primary) 8%, var(--card) 92%);
             color: var(--fg);
             font-weight: 600;
             font-size: .8rem;
             text-transform: uppercase;
             letter-spacing: .03em;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
 
         .row-main {
             cursor: pointer;
-            transition: background .15s ease;
+            transition: background .15s ease
         }
 
         .row-main:hover {
-            background: color-mix(in srgb, var(--brand) 6%, var(--bg) 94%);
+            background: color-mix(in srgb, var(--bs-primary) 6%, var(--bg) 94%)
         }
 
         .row-detail td {
-            background: color-mix(in srgb, var(--brand) 4%, var(--bg) 96%);
+            background: color-mix(in srgb, var(--bs-primary) 4%, var(--bg) 96%)
         }
 
         /* ===== BADGES ===== */
@@ -148,9 +177,9 @@
         }
 
         .pill-ok {
-            background: color-mix(in srgb, var(--brand) 15%, transparent 85%);
-            color: var(--brand);
-            border-color: color-mix(in srgb, var(--brand) 25%, transparent 75%);
+            background: color-mix(in srgb, var(--bs-teal) 15%, transparent 85%);
+            color: var(--bs-teal);
+            border-color: color-mix(in srgb, var(--bs-teal) 25%, transparent 75%);
         }
 
         .pill-low {
@@ -174,12 +203,12 @@
         /* ===== CHEVRON & SKELETON ===== */
         .chev {
             transition: transform .16s ease;
-            color: var(--muted);
+            color: var(--muted)
         }
 
         .chev.open {
             transform: rotate(90deg);
-            color: var(--brand);
+            color: var(--bs-primary)
         }
 
         .skel {
@@ -200,68 +229,35 @@
             }
         }
 
-        /* ===== Qty Tone ===== */
-        .qty-ok {
-            color: var(--brand);
-            font-weight: 700;
-        }
-
-        .qty-low {
-            color: var(--bs-blue);
-            font-weight: 700;
-        }
-
-        .qty-zero {
-            color: var(--muted);
-            font-weight: 700;
-        }
-
-        .qty-neg {
-            color: var(--bs-red);
-            font-weight: 700;
-        }
-
-        /* ===== Item Code Highlight ===== */
-        /* ===== Item Code Highlight (adaptif tema) ===== */
+        /* ===== Item Code Highlight (ikut mode) ===== */
         .item-code {
             font-weight: 800;
             letter-spacing: .03em;
-            color: #111827;
-            /* soft hitam untuk light mode */
             text-transform: uppercase;
             transition: color .25s ease;
+            color: var(--fg);
         }
-
-        [data-bs-theme="dark"] .item-code {
-            color: #ffffff;
-            /* putih bersih di dark mode */
-            text-shadow: 0 0 6px rgba(255, 255, 255, .25);
-        }
-
 
         @media(max-width:576px) {
 
             .table-items th,
             .table-items td {
-                padding: .55rem .6rem;
+                padding: .55rem .6rem
             }
 
             .kpi-card {
-                padding: .6rem .7rem;
+                padding: .6rem .7rem
             }
 
             .kpi-value {
-                font-size: 1.1rem;
+                font-size: 1.1rem
             }
         }
     </style>
 @endpush
 
-
-
 @section('content')
-    <div class="container-fluid py-3">
-
+    <div class="wrap py-3"><!-- selaras dengan Purchasing -->
         {{-- KPI BAR --}}
         <div class="kpi-bar mb-3">
             <div class="row g-2 g-md-3">
@@ -279,13 +275,13 @@
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="kpi-card">
-                        <div class="kpi-label"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Low</div>
+                        <div class="kpi-label"><i class="bi bi-exclamation-triangle-fill"></i> Low</div>
                         <div class="kpi-value qty-low">{{ number_format($kpi['low_count'] ?? 0, 0, ',', '.') }}</div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="kpi-card">
-                        <div class="kpi-label"><i class="bi bi-x-octagon-fill text-danger"></i> Out</div>
+                        <div class="kpi-label"><i class="bi bi-x-octagon-fill"></i> Out</div>
                         <div class="kpi-value qty-neg">{{ number_format($kpi['out_count'] ?? 0, 0, ',', '.') }}</div>
                     </div>
                 </div>
@@ -295,7 +291,7 @@
         {{-- HEADER FILTER --}}
         <div class="header-wrap mb-3">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h1 class="h5 m-0" style="color:#0f172a;">Inventory • Stocks (Per Item)</h1>
+                <h1 class="h5 m-0">Inventory • Stocks (Per Item)</h1>
 
                 <form id="miniFilter" class="d-flex align-items-center flex-wrap gap-2" method="GET"
                     action="{{ route('inventory.stocks.index') }}" autocomplete="off">
@@ -413,7 +409,7 @@
                                                 Slow</span>
                                         @endif
                                     </div>
-                                    <div class="small text-muted text-truncate" style="max-width:520px">{{ $r->item_name }}
+                                    <div class="small muted text-truncate" style="max-width:520px">{{ $r->item_name }}
                                     </div>
                                 </td>
 
@@ -422,7 +418,7 @@
                                     {{ number_format($qty, 2, ',', '.') }}
                                 </td>
                                 <td>{!! $statusHtml !!}</td>
-                                <td class="text-muted small text-nowrap">{{ $updated }}</td>
+                                <td class="muted small text-nowrap">{{ $updated }}</td>
                             </tr>
 
                             {{-- Breakdown AJAX --}}
@@ -438,7 +434,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-4">Tidak ada data.</td>
+                                <td colspan="5" class="text-center muted py-4">Tidak ada data.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -457,10 +453,11 @@
                     let t;
                     return (...a) => {
                         clearTimeout(t);
-                        t = setTimeout(() => fn(...a), wait);
+                        t = setTimeout(() => fn(...a), wait)
                     }
                 };
                 const deb = debounce(() => form.requestSubmit(), 260);
+
                 form.addEventListener('keydown', e => {
                     if (e.key === 'Enter') e.preventDefault();
                 });
@@ -488,6 +485,7 @@
                 const icon = tr.querySelector('.chev');
                 const isOpen = !detailRow.classList.contains('d-none');
 
+                // close all first
                 tbody.querySelectorAll('.row-detail').forEach(x => x.classList.add('d-none'));
                 tbody.querySelectorAll('.row-main .chev').forEach(x => x.classList.remove('open'));
                 if (isOpen) return;
@@ -500,6 +498,7 @@
                 <div class="skel mb-1"></div>
                 <div class="skel mb-1" style="width:78%"></div>
             </div>`;
+
                 try {
                     const url = new URL(
                         "{{ route('inventory.stocks.breakdown', ['itemCode' => '__ITEM__']) }}"

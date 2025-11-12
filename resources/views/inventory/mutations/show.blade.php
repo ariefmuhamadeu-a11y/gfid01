@@ -4,19 +4,26 @@
 @push('head')
     <style>
         :root {
+            --radius: 14px;
             --line: color-mix(in srgb, var(--bs-border-color) 78%, var(--bs-body-bg) 22%);
             --head-bg: color-mix(in srgb, var(--bs-primary) 7%, var(--bs-body-bg) 93%);
             --head-fg: color-mix(in srgb, var(--bs-primary-text-emphasis) 60%, var(--bs-body-color) 40%);
             --muted: var(--bs-secondary-color);
             --in: var(--bs-teal);
             --out: var(--bs-orange);
+            --card: var(--card, var(--bs-body-bg));
             --card-bg: color-mix(in srgb, var(--bs-body-bg) 96%, var(--bs-primary) 4%);
         }
 
+        .wrap {
+            max-width: 1100px;
+            margin-inline: auto
+        }
+
         .card {
-            border: 1px solid var(--line);
-            border-radius: 14px;
             background: var(--card-bg);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
             box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
             overflow: hidden
         }
@@ -26,7 +33,7 @@
             font-variant-numeric: tabular-nums
         }
 
-        .dim {
+        .muted {
             color: var(--muted)
         }
 
@@ -37,7 +44,7 @@
             text-transform: uppercase;
             letter-spacing: .03em;
             padding: .55rem .85rem;
-            border-bottom: 1px solid var(--line);
+            border-bottom: 1px solid var(--line)
         }
 
         .kv {
@@ -70,7 +77,7 @@
         }
 
         .pill.out {
-            background: color-mix(in srgb, var(--out) 10%, var(--bs-body-bg) 90%);
+            background: color-mix(in srgb, var(--out)10%, var(--bs-body-bg) 90%);
             color: var(--out)
         }
 
@@ -79,16 +86,26 @@
             color: var(--head-fg)
         }
 
+        .table {
+            margin: 0
+        }
+
         .table th,
         .table td {
-            vertical-align: middle
+            vertical-align: middle;
+            border: 0
         }
 
         .table thead th {
             background: var(--head-bg);
             color: var(--head-fg);
+            text-transform: uppercase;
             font-size: .78rem;
-            text-transform: uppercase
+            border-bottom: 1px solid var(--line)
+        }
+
+        .table tbody tr+tr td {
+            border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent 20%)
         }
 
         .qty-in {
@@ -99,22 +116,22 @@
             color: var(--out)
         }
 
-        /* Sticky Back FAB */
+        /* Sticky Back FAB (selaras style) */
         .fab-back {
             position: fixed;
             right: 18px;
             bottom: 18px;
             z-index: 10;
             border-radius: 999px;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, .12)
         }
 
-        /* Next/Prev group */
+        /* Next/Prev */
         .nav-pair .btn {
             border-color: var(--line)
         }
 
-        @media (max-width: 768px) {
+        @media (max-width:768px) {
             .kv {
                 grid-template-columns: 120px 1fr;
                 padding: .85rem
@@ -124,28 +141,30 @@
 @endpush
 
 @section('content')
-    <div class="container py-3">
+    <div class="wrap py-3">
         <div class="d-flex align-items-center justify-content-between mb-3">
-            <h3 class="m-0">Inventory • Mutation Detail</h3>
+            <div>
+                <h5 class="mb-0">Inventory • Mutation Detail</h5>
+                <div class="muted small">Detail jejak mutasi & riwayat LOT</div>
+            </div>
 
             <div class="nav-pair d-flex gap-2">
                 {{-- PREV --}}
                 @if ($prev)
-                    <a href="{{ route('inventory.mutations.show', $prev->id) }}" class="btn btn-outline-secondary">
+                    <a href="{{ route('inventory.mutations.show', $prev->id) }}" class="btn btn-ghost">
                         <i class="bi bi-chevron-left me-1"></i> Prev
                     </a>
                 @else
-                    <button class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left me-1"></i> Prev</button>
+                    <button class="btn btn-ghost" disabled><i class="bi bi-chevron-left me-1"></i> Prev</button>
                 @endif
 
                 {{-- NEXT --}}
                 @if ($next)
-                    <a href="{{ route('inventory.mutations.show', $next->id) }}" class="btn btn-outline-secondary">
+                    <a href="{{ route('inventory.mutations.show', $next->id) }}" class="btn btn-ghost">
                         Next <i class="bi bi-chevron-right ms-1"></i>
                     </a>
                 @else
-                    <button class="btn btn-outline-secondary" disabled>Next <i
-                            class="bi bi-chevron-right ms-1"></i></button>
+                    <button class="btn btn-ghost" disabled>Next <i class="bi bi-chevron-right ms-1"></i></button>
                 @endif
             </div>
         </div>
@@ -157,7 +176,7 @@
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                     <div>
                         <div class="fw-semibold mono">{{ $mutation->type }}</div>
-                        <div class="dim">{{ optional($mutation->date)->format('d/m/Y') }}</div>
+                        <div class="muted">{{ optional($mutation->date)->format('d/m/Y') }}</div>
                     </div>
 
                     @php
@@ -198,7 +217,7 @@
                     @elseif($val < 0)
                         − {{ idr(abs($val), 0) }}
                     @else
-                        <span class="dim">Rp 0</span>
+                        <span class="muted">Rp 0</span>
                     @endif
                 </div>
                 <div class="k">Ref</div>
@@ -215,9 +234,8 @@
                 <div class="p-3 d-flex flex-column gap-2">
                     @if ($purchaseSource)
                         <div class="d-flex align-items-center justify-content-between">
-                            <div class="dim">Pembelian</div>
-                            {{-- Ganti route sesuai nama rute show invoice kamu --}}
-                            <a class="btn btn-sm btn-outline-primary"
+                            <div class="muted">Pembelian</div>
+                            <a class="btn btn-ghost btn-sm"
                                 href="{{ route('purchasing.invoices.show', $purchaseSource['invoice_id'] ?? null) }}">
                                 Lihat Invoice {{ $purchaseSource['invoice_code'] ?? '' }}
                             </a>
@@ -226,9 +244,9 @@
 
                     @if ($transferPartner)
                         <div class="d-flex align-items-center justify-content-between">
-                            <div class="dim">Transfer</div>
+                            <div class="muted">Transfer</div>
                             <div class="mono">
-                                {{ $transferPartner['from'] ?? '—' }} <span class="dim">→</span>
+                                {{ $transferPartner['from'] ?? '—' }} <span class="muted">→</span>
                                 {{ $transferPartner['to'] ?? '—' }}
                             </div>
                         </div>
@@ -248,7 +266,7 @@
                                 <th style="width:100px">Tanggal</th>
                                 <th style="width:140px">Tipe</th>
                                 <th>Gudang</th>
-                                <th class="text-end" style="width:150px">Qty (IN / OUT)</th>
+                                <th class="text-end" style="width:170px">Qty (IN / OUT)</th>
                                 <th class="text-end" style="width:110px">Net</th>
                             </tr>
                         </thead>
@@ -261,15 +279,18 @@
                                 @endphp
                                 <tr>
                                     <td class="mono">{{ optional($h->date)->format('d/m/Y') }}</td>
-                                    <td><span class="badge rounded-pill text-bg-light mono">{{ $h->type }}</span></td>
+                                    <td><span class="badge bg-light text-dark mono">{{ $h->type }}</span></td>
                                     <td>{{ $h->warehouse?->name ?? '—' }}</td>
-                                    <td class="text-end mono"><span class="qty-in">+ {{ numf($hIn, 2) }}</span> <span
-                                            class="dim">/</span> <span class="qty-out">− {{ numf($hOut, 2) }}</span></td>
+                                    <td class="text-end mono">
+                                        <span class="qty-in">+ {{ numf($hIn, 2) }}</span>
+                                        <span class="muted">/</span>
+                                        <span class="qty-out">− {{ numf($hOut, 2) }}</span>
+                                    </td>
                                     <td class="text-end mono">{{ $hNet >= 0 ? '+' : '−' }} {{ numf(abs($hNet), 2) }}</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="text-center dim py-3">Tidak ada riwayat.</td>
+                                    <td colspan="5" class="text-center muted py-3">Tidak ada riwayat.</td>
                                 </tr>
                             @endforelse
                         </tbody>

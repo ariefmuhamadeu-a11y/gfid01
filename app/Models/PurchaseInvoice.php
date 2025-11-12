@@ -43,4 +43,16 @@ class PurchaseInvoice extends Model
                 ->orWhereHas('supplier', fn($s) => $s->where('name', 'like', "%{$term}%"));
         });
     }
+
+    public function payments()
+    {
+        return $this->hasMany(\App\Models\PurchasePayment::class, 'purchase_invoice_id');
+    }
+
+    public function scopeUnpaid($q)
+    {return $q->where('payment_status', 'unpaid');}
+    public function scopePartial($q)
+    {return $q->where('payment_status', 'partial');}
+    public function scopePaid($q)
+    {return $q->where('payment_status', 'paid');}
 }

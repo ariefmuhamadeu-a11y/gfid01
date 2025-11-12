@@ -4,6 +4,7 @@
 @push('head')
     <style>
         :root {
+            --radius: 14px;
             --line: color-mix(in srgb, var(--bs-border-color) 78%, var(--bs-body-bg) 22%);
             --head-bg: color-mix(in srgb, var(--bs-primary) 7%, var(--bs-body-bg) 93%);
             --head-fg: color-mix(in srgb, var(--bs-primary-text-emphasis) 60%, var(--bs-body-color) 40%);
@@ -12,10 +13,20 @@
             --out: var(--bs-orange);
         }
 
+        .wrap {
+            max-width: 1100px;
+            margin-inline: auto
+        }
+
         .card {
+            background: var(--card);
             border: 1px solid var(--line);
-            border-radius: 12px;
+            border-radius: var(--radius);
             overflow: hidden
+        }
+
+        .soft {
+            border-color: color-mix(in srgb, var(--line) 70%, transparent 30%)
         }
 
         .mono {
@@ -23,31 +34,83 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace
         }
 
-        .dim {
+        .muted {
             color: var(--muted)
         }
 
+        .btn-ghost {
+            border: 1px solid var(--line);
+            background: transparent
+        }
+
+        /* KPI */
+        .kpi {
+            padding: .9rem 1rem
+        }
+
+        .kpi .label {
+            font-size: .82rem;
+            color: var(--muted);
+            letter-spacing: .02em
+        }
+
+        .kpi .value {
+            font-weight: 600;
+            font-size: 1.1rem
+        }
+
+        .kpi-in {
+            color: var(--in)
+        }
+
+        .kpi-out {
+            color: var(--out)
+        }
+
+        /* Filter */
+        .filter .form-control,
+        .filter .form-select {
+            border-radius: 10px;
+            background: transparent;
+            border: 1px solid var(--line)
+        }
+
+        /* Chips */
+        .chips .btn {
+            border-color: var(--line)
+        }
+
+        .chips .btn.active {
+            background: color-mix(in srgb, var(--bs-primary) 8%, transparent);
+            border-color: var(--bs-primary)
+        }
+
+        /* Table */
         .table {
             margin: 0
         }
 
+        .table thead th {
+            font-weight: 600;
+            color: var(--muted);
+            background: var(--card);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            border-bottom: 1px solid var(--line);
+            text-transform: uppercase;
+            font-size: .78rem;
+            letter-spacing: .03em
+        }
+
         .table th,
         .table td {
+            border: 0;
             vertical-align: middle
         }
 
-        .table thead th {
-            background: var(--head-bg);
-            color: var(--head-fg);
-            text-transform: uppercase;
-            font-size: .78rem;
-            letter-spacing: .03em;
-            border-bottom: 1px solid var(--line)
-        }
-
-        .table tbody td {
-            border-color: var(--line);
-            padding: .55rem .70rem
+        .table tbody tr+tr td {
+            border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent 20%)
         }
 
         .table tbody tr:hover {
@@ -62,34 +125,7 @@
             transform: translateY(1px)
         }
 
-        .kpi-card {
-            border: 1px solid var(--line);
-            border-radius: 12px
-        }
-
-        .kpi-title {
-            font-size: .8rem;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: .03em
-        }
-
-        .kpi-value {
-            font-size: 1.05rem
-        }
-
-        .kpi-in {
-            color: var(--in)
-        }
-
-        .kpi-out {
-            color: var(--out)
-        }
-
-        .chips .btn {
-            border-color: var(--line)
-        }
-
+        /* Subtotal badge */
         .sub-badge {
             background: color-mix(in srgb, var(--bs-primary) 10%, var(--bs-body-bg) 90%);
             border: 1px solid var(--line);
@@ -97,16 +133,15 @@
             padding: .18rem .55rem;
         }
 
-        /* ===== Qty rapi: sign | number | unit ===== */
+        /* Qty rapi: sign | number | unit */
         .qty-cell {
             display: grid;
             grid-template-columns: auto minmax(5.2rem, auto) auto;
-            /* sign | angka | unit */
             align-items: baseline;
             justify-items: end;
             column-gap: .35rem;
             white-space: nowrap;
-            font-variant-numeric: tabular-nums;
+            font-variant-numeric: tabular-nums
         }
 
         .qty-sign {
@@ -160,45 +195,46 @@
 @endpush
 
 @section('content')
-    <div class="container py-3">
+    <div class="wrap py-3">
+        {{-- Header --}}
         <div class="d-flex align-items-center justify-content-between mb-3">
-            <h3 class="m-0">Inventory • Mutations</h3>
+            <div>
+                <h5 class="mb-0">Inventory • Mutations</h5>
+                <div class="muted small">Jejak mutasi per hari, lengkap dengan subtotal & nilai</div>
+            </div>
+            <a class="btn btn-ghost btn-sm" href="{{ route('inventory.mutations.index') }}">Reset</a>
         </div>
 
-        {{-- KPI BAR --}}
+        {{-- KPI BAR (selaras kpi purchasing) --}}
         @php
-            $numf = function ($v, $d = 2) {
-                return function_exists('numf') ? numf($v, $d) : number_format((float) $v, $d, ',', '.');
-            };
-            $idr = function ($v) {
-                return function_exists('idr') ? idr($v, 0) : 'Rp ' . number_format((float) $v, 0, ',', '.');
-            };
+            $numf = fn($v, $d = 2) => number_format((float) $v, $d, ',', '.');
+            $idr = fn($v) => 'Rp ' . number_format((float) $v, 0, ',', '.');
             $tIn = (float) ($totalIn ?? 0);
             $tOut = (float) ($totalOut ?? 0);
             $tNet = $tIn - $tOut;
         @endphp
         <div class="row g-2 mb-3">
-            <div class="col-4">
-                <div class="kpi-card p-3">
-                    <div class="kpi-title">Total IN</div>
-                    <div class="kpi-value mono kpi-in">+ {{ $numf($tIn, 2) }}</div>
+            <div class="col-6 col-md-4">
+                <div class="card kpi">
+                    <div class="label">Total IN</div>
+                    <div class="value mono kpi-in">+ {{ $numf($tIn, 2) }}</div>
                 </div>
             </div>
-            <div class="col-4">
-                <div class="kpi-card p-3">
-                    <div class="kpi-title">Total OUT</div>
-                    <div class="kpi-value mono kpi-out">− {{ $numf($tOut, 2) }}</div>
+            <div class="col-6 col-md-4">
+                <div class="card kpi">
+                    <div class="label">Total OUT</div>
+                    <div class="value mono kpi-out">− {{ $numf($tOut, 2) }}</div>
                 </div>
             </div>
-            <div class="col-4">
-                <div class="kpi-card p-3">
-                    <div class="kpi-title">Net</div>
-                    <div class="kpi-value mono">{{ $tNet >= 0 ? '+' : '−' }} {{ $numf(abs($tNet), 2) }}</div>
+            <div class="col-12 col-md-4">
+                <div class="card kpi">
+                    <div class="label">Net</div>
+                    <div class="value mono">{{ $tNet >= 0 ? '+' : '−' }} {{ $numf(abs($tNet), 2) }}</div>
                 </div>
             </div>
         </div>
 
-        {{-- QUICK FILTER CHIPS --}}
+        {{-- QUICK FILTER CHIPS (selaras tampilan purchasing) --}}
         <div class="d-flex flex-wrap gap-2 mb-3 chips">
             @php
                 $baseParams = [
@@ -228,35 +264,36 @@
             @endforeach
         </div>
 
-        {{-- FILTER BAR --}}
-        <form method="GET" action="{{ route('inventory.mutations.index') }}" class="row g-2 mb-3" id="mutFilter">
-            <div class="col-12 col-md-4">
-                <input type="text" name="q" value="{{ request('q') }}" class="form-control"
-                    placeholder="Cari ref / item…">
-            </div>
-            <div class="col-6 col-md-2">
-                <select name="type" class="form-select">
-                    <option value="">Tipe</option>
-                    @foreach ($types as $t)
-                        <option value="{{ $t }}" @selected(request('type') === $t)>{{ $t }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <select name="warehouse" class="form-select">
-                    <option value="">Gudang</option>
-                    @foreach ($warehouses ?? collect() as $w)
-                        <option value="{{ $w->id }}" @selected((string) request('warehouse') === (string) $w->id)>
-                            {{ $w->name }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <input type="date" name="date_from" value="{{ request('date_from') }}" class="form-control">
-            </div>
-            <div class="col-6 col-md-2">
-                <input type="date" name="date_to" value="{{ request('date_to') }}" class="form-control">
+        {{-- FILTER BAR (auto-apply realtime seperti purchasing) --}}
+        <form method="GET" action="{{ route('inventory.mutations.index') }}" class="card soft p-3 mb-3 filter"
+            id="mutFilter">
+            <div class="row g-2">
+                <div class="col-12 col-md-4">
+                    <input type="text" name="q" value="{{ request('q') }}" class="form-control"
+                        placeholder="Cari ref / item…">
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="type" class="form-select">
+                        <option value="">Tipe</option>
+                        @foreach ($types as $t)
+                            <option value="{{ $t }}" @selected(request('type') === $t)>{{ $t }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="warehouse" class="form-select">
+                        <option value="">Gudang</option>
+                        @foreach ($warehouses ?? collect() as $w)
+                            <option value="{{ $w->id }}" @selected((string) request('warehouse') === (string) $w->id)>{{ $w->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <input type="date" name="date_from" value="{{ request('date_from') }}" class="form-control">
+                </div>
+                <div class="col-6 col-md-2">
+                    <input type="date" name="date_to" value="{{ request('date_to') }}" class="form-control">
+                </div>
             </div>
         </form>
 
@@ -295,12 +332,12 @@
                                 $sumValNet = $sumValIn - $sumValOut;
                             @endphp
 
-                            {{-- SUBTOTAL --}}
+                            {{-- SUBTOTAL HARI --}}
                             <tr>
                                 <td class="py-2"><span class="sub-badge mono">{{ $dateKey }}</span></td>
-                                <td class="py-2 dim">Subtotal</td>
-                                <td class="py-2 dim">—</td>
-                                <td class="py-2 text-end dim">—</td>
+                                <td class="py-2 muted">Subtotal</td>
+                                <td class="py-2 muted">—</td>
+                                <td class="py-2 text-end muted">—</td>
                                 <td class="py-2 text-end">
                                     <div class="qty-cell mono">
                                         <span class="qty-sign">&nbsp;</span>
@@ -318,13 +355,13 @@
                                         <span class="qty-unit"></span>
                                     </div>
                                 </td>
-                                <td class="py-2 text-end mono">{{ $netDay >= 0 ? '+' : '−' }} {{ $numf(abs($netDay), 2) }}
+                                <td class="py-2 text-end mono">{{ $netDay >= 0 ? '+' : '−' }} {{ $numf(abs($netDay), 2) }}</td>
+                                <td class="py-2 text-end mono">
+                                    <span class="val-num">{{ $sumValNet >= 0 ? '+' : '−' }} {{ $idr(abs($sumValNet)) }}</span>
                                 </td>
-                                <td class="py-2 text-end mono"><span class="val-num">{{ $sumValNet >= 0 ? '+' : '−' }}
-                                        {{ $idr(abs($sumValNet)) }}</span></td>
                             </tr>
 
-                            {{-- ROWS --}}
+                            {{-- ITEM ROWS --}}
                             @foreach ($items as $row)
                                 @php
                                     $qIn = (float) ($row->qty_in ?? 0);
@@ -334,7 +371,6 @@
                                     $uc = (float) ($row->unit_cost ?? ($row->lot->unit_cost ?? 0));
                                     $val = $qIn > 0 ? $qIn * $uc : ($qOut > 0 ? -$qOut * $uc : 0);
 
-                                    // tampilkan satu sign dominan agar tidak “lompat”: OUT prioritas
                                     $sign = $qOut > 0 ? '−' : ($qIn > 0 ? '+' : ' ');
                                     $num = $qOut > 0 ? $qOut : ($qIn > 0 ? $qIn : 0);
                                     $tone = $qOut > 0 ? 'qty-out' : ($qIn > 0 ? 'qty-in' : 'qty-zero');
@@ -343,13 +379,10 @@
                                     $href = route('inventory.mutations.show', $row->id);
                                 @endphp
                                 <tr class="row-link" data-href="{{ $href }}">
-                                    <td class="mono dim">{{ \Carbon\Carbon::parse($row->date)->format('H:i') }}</td>
-                                    <td><span class="badge rounded-pill text-bg-light mono">{{ $row->type ?? '—' }}</span>
-                                    </td>
+                                    <td class="mono muted">{{ \Carbon\Carbon::parse($row->date)->format('H:i') }}</td>
+                                    <td><span class="badge bg-light text-dark mono">{{ $row->type ?? '—' }}</span></td>
                                     <td class="mono">{{ $itemCode }}</td>
                                     <td class="text-end mono">{{ $idr($uc) }}</td>
-
-                                    {{-- QTY (sign | number | unit) --}}
                                     <td class="text-end">
                                         <div class="qty-cell mono">
                                             <span class="qty-sign {{ $tone }}">{{ $sign }}</span>
@@ -357,23 +390,21 @@
                                             <span class="qty-unit">{{ $row->unit ?? '' }}</span>
                                         </div>
                                     </td>
-
                                     <td class="text-end mono">{{ $net >= 0 ? '+' : '−' }} {{ $numf(abs($net), 2) }}</td>
-
                                     <td class="text-end mono">
                                         @if ($val > 0)
                                             <span class="val-num">{{ $idr($val) }}</span>
                                         @elseif ($val < 0)
                                             <span class="val-num">− {{ $idr(abs($val)) }}</span>
                                         @else
-                                            <span class="val-num dim">Rp 0</span>
+                                            <span class="val-num muted">Rp 0</span>
                                         @endif
                                     </td>
                                 </tr>
                             @endforeach
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center dim py-4">Belum ada data.</td>
+                                <td colspan="7" class="text-center muted py-4">Belum ada data.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -381,37 +412,64 @@
             </div>
 
             @if (!empty($rows))
-                <div class="card-body">{{ $rows->links() }}</div>
+                <div class="p-2">{{ $rows->withQueryString()->links() }}</div>
             @endif
         </div>
     </div>
+@endsection
 
-    {{-- Auto-submit filter & row click --}}
+@push('scripts')
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('mutFilter');
-            if (form) {
-                // autosubmit untuk select & tanggal
-                form.querySelectorAll('select[name], input[type="date"][name]').forEach(el => {
-                    el.addEventListener('change', () => form.requestSubmit());
-                });
-                // input teks hanya submit saat Enter
-                const q = form.querySelector('input[name="q"]');
-                if (q) q.addEventListener('keydown', e => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        form.requestSubmit();
-                    }
-                });
-            }
-
-            // baris klik → ke halaman show
+        (() => {
+            // Row click → show page
             document.querySelectorAll('tr.row-link').forEach(tr => {
                 tr.addEventListener('click', () => {
                     const href = tr.getAttribute('data-href');
                     if (href) window.location.href = href;
                 });
             });
-        });
+
+            // Filter auto-apply (selaras purchasing: debounce 500ms untuk input teks)
+            const form = document.getElementById('mutFilter');
+            if (!form) return;
+
+            let timer = null;
+            const debounce = (fn, wait = 500) => {
+                return (...args) => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => fn.apply(this, args), wait);
+                }
+            };
+            const submitFiltered = () => {
+                const url = new URL(window.location.href);
+                const fd = new FormData(form);
+                url.search = '';
+                for (const [k, v] of fd.entries()) {
+                    if (v !== '') url.searchParams.set(k, v);
+                }
+                window.history.replaceState({}, '', url);
+                form.submit();
+            };
+            const debounced = debounce(submitFiltered, 500);
+
+            form.querySelectorAll('select, input[type="date"]').forEach(el => {
+                el.addEventListener('change', submitFiltered);
+            });
+            form.querySelectorAll('input[type="text"], input[type="search"]').forEach(el => {
+                el.addEventListener('input', debounced);
+                el.addEventListener('change', submitFiltered);
+            });
+
+            // ESC untuk clear cepat field teks aktif
+            form.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.activeElement instanceof HTMLInputElement) {
+                    const el = document.activeElement;
+                    if (el.form === form && (el.type === 'text' || el.type === 'search')) {
+                        el.value = '';
+                        debounced();
+                    }
+                }
+            });
+        })();
     </script>
-@endsection
+@endpush
