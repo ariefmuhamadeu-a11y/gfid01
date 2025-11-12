@@ -7,6 +7,10 @@ use App\Models\Item;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceLine;
 use App\Models\Supplier;
+use App\Services\InventoryService;
+use App\Services\JournalService;
+use App\Services\PurchasePaymentService;
+use App\Support\LotCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +25,7 @@ class PurchaseController extends Controller
         $range = $r->get('range'); // "YYYY-MM-DD s/d YYYY-MM-DD"
         $pay = $r->get('payment'); // unpaid|partial|paid   <-- kamu pakai 'payment'
 
-        $base = \App\Models\PurchaseInvoice::query()->with('supplier')
+        $base = PurchaseInvoice::query()->with('supplier')
             ->when($q, fn($qq) => $qq->where(function ($w) use ($q) {
                 $w->where('code', 'like', "%{$q}%")
                     ->orWhereHas('supplier', fn($s) => $s->where('name', 'like', "%{$q}%"));
@@ -49,7 +53,7 @@ class PurchaseController extends Controller
             ->orderByDesc('date')->orderByDesc('id')
             ->paginate(20)->appends($r->query());
 
-        $suppliers = \App\Models\Supplier::orderBy('name')->get(['id', 'name']);
+        $suppliers = Supplier::orderBy('name')->get(['id', 'name']);
 
         return view('purchasing.invoices.index', compact('q', 'status', 'supp', 'range', 'suppliers', 'rows', 'pay', 'stats'));
     }
@@ -105,16 +109,16 @@ class PurchaseController extends Controller
     public function create(Request $r)
     {
         // === Supplier dropdown ===
-        $suppliers = \App\Models\Supplier::orderBy('name')->get(['id', 'name', 'code']);
+        $suppliers = Supplier::orderBy('name')->get(['id', 'name', 'code']);
 
         // === Default filter tipe item (material|pendukung|finished) ===
         $filterType = $r->get('type', 'material');
 
         // === Kirim SEMUA item ke FE (biar bisa gonta-ganti filter tanpa reload) ===
-        $itemsAll = \App\Models\Item::orderBy('name')->get(['id', 'code', 'name', 'uom', 'type']);
+        $itemsAll = Item::orderBy('name')->get(['id', 'code', 'name', 'uom', 'type']);
 
         // === Default gudang tujuan = KONTRAKAN (fallback: gudang pertama) ===
-        $kontrakanId = \DB::table('warehouses')->where('code', 'KONTRAKAN')->value('id') ?? \DB::table('warehouses')->orderBy('id')->value('id');
+        $kontrakanId = DB::table('warehouses')->where('code', 'KONTRAKAN')->value('id') ?? \DB::table('warehouses')->orderBy('id')->value('id');
 
         // === (Opsional) nilai awal untuk DP & idempotency di FE ===
         $defaults = [
@@ -133,9 +137,9 @@ class PurchaseController extends Controller
     /** Simpan pembelian sebagai DRAFT (tanpa LOT, mutasi, jurnal). */
     public function store(
         Request $r,
-        \App\Services\InventoryService $inv,
-        \App\Services\JournalService $journal,
-        \App\Services\PurchasePaymentService $pps
+        InventoryService $inv,
+        JournalService $journal,
+        PurchasePaymentService $pps
     ) {
         // ===== Validasi =====
         $data = $r->validate([
@@ -200,7 +204,7 @@ class PurchaseController extends Controller
 
         // ===== Generate code INV-BKU-YYMMDD-### =====
         $datePart = date('ymd', strtotime($trxDate));
-        $prefix = "INV-BKU-{$datePart}-";
+        $prefix = "FPB-{$datePart}-";
         $invCode = $prefix . str_pad((string) ($this->nextSeq($prefix)), 3, '0', STR_PAD_LEFT);
 
         // (Opsional) Idempotensi jika kamu sudah menambah kolom idempotency_key
@@ -213,7 +217,7 @@ class PurchaseController extends Controller
 
         DB::transaction(function () use ($data, $invCode, $otherCosts, $trxDate) {
             /** @var \App\Models\PurchaseInvoice $invoice */
-            $invoice = \App\Models\PurchaseInvoice::create([
+            $invoice = PurchaseInvoice::create([
                 'code' => $invCode,
                 'date' => $trxDate,
                 'supplier_id' => $data['supplier_id'],
@@ -235,7 +239,7 @@ class PurchaseController extends Controller
                 $unit = (string) $line['unit'];
                 $cost = (float) $line['unit_cost'];
 
-                \App\Models\PurchaseInvoiceLine::create([
+                PurchaseInvoiceLine::create([
                     'purchase_invoice_id' => $invoice->id,
                     'item_id' => $item->id,
                     'item_code' => $item->code,
@@ -325,11 +329,11 @@ class PurchaseController extends Controller
     }
 
     public function post(
-        \Illuminate\Http\Request $r,
-        \App\Models\PurchaseInvoice $invoice,
-        \App\Services\InventoryService $inv,
-        \App\Services\JournalService $journal,
-        \App\Services\PurchasePaymentService $pps
+        Request $r,
+        PurchaseInvoice $invoice,
+        InventoryService $inv,
+        JournalService $journal,
+        PurchasePaymentService $pps
     ) {
         // Reload relasi minimal
         $invoice->load(['lines.item:id,code', 'payments', 'supplier:id,name', 'warehouse:id,code']);
@@ -351,7 +355,7 @@ class PurchaseController extends Controller
             // === 2) Generate LOT per line + Mutasi PURCHASE_IN
             foreach ($invoice->lines as $ln) {
                 $itemCode = $ln->item_code ?? $ln->item?->code; // fallback
-                $lotCode = \App\Support\LotCode::nextMaterial((string) $itemCode, new \DateTime($trxDate));
+                $lotCode = LotCode::nextMaterial((string) $itemCode, new \DateTime($trxDate));
 
                 $lotId = DB::table('lots')->insertGetId([
                     'item_id' => $ln->item_id,
