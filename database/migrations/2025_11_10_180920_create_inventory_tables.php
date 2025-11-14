@@ -26,6 +26,7 @@ return new class extends Migration
         Schema::create('inventory_mutations', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('warehouse_id');
+            $t->string('category', 30)->nullable()->after('warehouse_id');
             $t->unsignedBigInteger('lot_id');
             $t->unsignedBigInteger('item_id');
             $t->string('item_code');

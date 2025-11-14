@@ -102,4 +102,20 @@ class WipItem extends Model
     {
         return $q->where('warehouse_id', $warehouseId);
     }
+
+// Susulan 001
+    public function scopeStageCutting($q)
+    {
+        return $q->where('stage', 'cutting');
+    }
+
+    public function scopeQcPending($q)
+    {
+        return $q->where('qc_status', 'pending');
+    }
+
+    public function components()
+    {
+        return $this->hasMany(WipComponent::class, 'wip_item_id');
+    }
 }

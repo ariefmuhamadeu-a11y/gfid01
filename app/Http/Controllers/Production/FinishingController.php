@@ -167,16 +167,15 @@ class FinishingController extends Controller
             ]);
             // 5) TODO: integrasi ke modul Inventory FG (mutasi stok, dsb.)
             InventoryService::addStockLot([
-                'warehouse_id' => $fg->warehouse_id,
-                'lot_id' => $fg->lot_id, // LOT FG baru
-                'item_id' => $fg->item_id,
-                'item_code' => $fg->item_code,
-                'unit' => $fg->unit, // 'pcs'
-                'qty' => $fg->qty,
-                'date' => $date->toDateString(),
+                'warehouse_id' => $wip->warehouse_id,
+                'lot_id' => $wip->source_lot_id, // LOT kain asal (trace)
+                'unit' => 'pcs',
+                'qty' => $fgQty,
                 'type' => 'FG_IN',
                 'ref_code' => $batch->code,
                 'note' => 'FG dari finishing ' . $batch->code,
+                'date' => $date->toDateString(),
+                'category' => 'fg',
             ]);
 
         });

@@ -48,6 +48,10 @@ return new class extends Migration
             $table->index(['warehouse_id', 'item_id']);
             $table->index(['stage']);
             $table->index(['item_code']);
+
+            // Susulan 001
+            $table->string('qc_status', 20)->default('pending')->after('stage');
+            $table->string('qc_notes', 255)->nullable()->after('qc_status');
         });
     }
 

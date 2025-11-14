@@ -6,11 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalTransfer;
 use App\Models\Item;
 use App\Models\ProductionBatch;
+use App\Models\Warehouse;
 use App\Models\WipItem;
 use App\Services\InventoryService;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class VendorCuttingController extends Controller
 {
@@ -72,17 +73,20 @@ class VendorCuttingController extends Controller
      */
     public function store($externalTransferId, Request $request)
     {
+        // Ambil header + lines External Transfer (cutting)
         $t = ExternalTransfer::with('lines')
             ->where('process', 'cutting')
             ->whereIn('status', ['sent', 'received'])
             ->findOrFail($externalTransferId);
-        // Validasi input form
+
+        // =============== VALIDASI INPUT FORM ===============
         $data = $request->validate([
             'input_qty' => ['required', 'numeric', 'min:0'],
             'input_uom' => ['nullable', 'string', 'max:10'],
             'waste_qty' => ['nullable', 'numeric', 'min:0'],
             'remain_qty' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
+
             'results' => ['required', 'array', 'min:1'],
             'results.*.item_code' => ['required', 'string', 'max:50'],
             'results.*.item_name' => ['nullable', 'string', 'max:255'],
@@ -91,7 +95,7 @@ class VendorCuttingController extends Controller
             'results.required' => 'Minimal satu baris hasil cutting harus diisi.',
         ]);
 
-        // Susun outputItems dulu untuk bisa validasi item master
+        // Susun hasil cutting: [item_code => total_qty]
         $outputItems = [];
         foreach ($data['results'] as $row) {
             $code = trim($row['item_code']);
@@ -113,7 +117,7 @@ class VendorCuttingController extends Controller
             ]);
         }
 
-        // Validasi bahwa semua item_code ada di tabel items
+        // Pastikan semua item hasil cutting sudah ada di master items
         $codes = array_keys($outputItems);
         $itemsFound = Item::whereIn('code', $codes)->pluck('id', 'code');
 
@@ -124,97 +128,123 @@ class VendorCuttingController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($t, $data, $outputItems, $itemsFound) {
-            // 1) Update status external_transfer
+        // Cari gudang utama / KONTRAKAN (gudang stok kain & WIP)
+        $mainWarehouseId = Warehouse::where('code', 'KONTRAKAN')->value('id');
+        if (!$mainWarehouseId) {
+            throw new \RuntimeException('Warehouse dengan code "KONTRAKAN" tidak ditemukan.');
+        }
+
+        DB::transaction(function () use ($t, $data, $outputItems, $itemsFound, $mainWarehouseId) {
+            $today = now()->toDateString();
+
+            // ===== 1) UPDATE STATUS EXTERNAL TRANSFER =====
             if ($t->status === 'sent') {
                 $t->status = 'received';
             }
-            // Anggap setelah input hasil cutting, dokumen ini selesai
             $t->status = 'done';
             $t->save();
 
-            // 2) Hitung output_total_pcs
-            $outputTotal = array_sum($outputItems);
-
-            // 3) Ambil lot & uom dari baris pertama
+            // ===== 2) INFO LOT & UOM DARI BARIS PERTAMA =====
             $firstLine = $t->lines->first();
             $lotId = $firstLine?->lot_id;
-            $uom = $data['input_uom'] ?: ($firstLine?->uom ?? 'kg');
+            $uom = $data['input_uom'] ?: ($firstLine?->unit ?? 'kg');
 
-            // 4) Generate kode batch cutting
-            $today = now();
+            if (!$lotId) {
+                throw new \RuntimeException('External Transfer cutting tidak memiliki LOT.');
+            }
+
+            $outputTotal = array_sum($outputItems);
+
+            // ===== 3) GENERATE KODE BATCH CUTTING =====
             $prefix = 'BCH-CUT';
-            $countToday = ProductionBatch::whereDate('date', $today->toDateString())
+            $countToday = ProductionBatch::whereDate('date', $today)
                 ->where('process', 'cutting')
                 ->count();
-            $seq = str_pad($countToday + 1, 3, '0', STR_PAD_LEFT);
-            $code = $prefix . '-' . $today->format('ymd') . '-' . $seq;
 
-            // 5) Insert production_batch (cutting)
+            $seq = str_pad($countToday + 1, 3, '0', STR_PAD_LEFT);
+            $code = $prefix . '-' . date('ymd', strtotime($today)) . '-' . $seq;
+
+            // ===== 4) SIMPAN PRODUCTION BATCH (CUTTING) =====
             $batch = ProductionBatch::create([
                 'code' => $code,
-                'date' => $today->toDateString(),
+                'date' => $today,
                 'process' => 'cutting',
                 'status' => 'done',
+
                 'external_transfer_id' => $t->id,
                 'lot_id' => $lotId,
-                'from_warehouse_id' => $t->to_warehouse_id, // cutting terjadi di lokasi tujuan
-                'to_warehouse_id' => $t->to_warehouse_id,
+
+                // proses fisik terjadi di vendor (to_warehouse dari ET)
+                'from_warehouse_id' => $t->to_warehouse_id,
+                // hasil & WIP kita anggap ada di KONTRAKAN
+                'to_warehouse_id' => $mainWarehouseId,
+
                 'operator_code' => $t->operator_code,
 
-                'input_qty' => $data['input_qty'],
+                'input_qty' => (float) $data['input_qty'],
                 'input_uom' => $uom,
 
                 'output_total_pcs' => $outputTotal,
-                'output_items_json' => $outputItems,
+                'output_items_json' => $outputItems, // cast json di model kalau mau
 
-                'waste_qty' => $data['waste_qty'] ?? 0,
-                'remain_qty' => $data['remain_qty'] ?? 0,
+                'waste_qty' => (float) ($data['waste_qty'] ?? 0),
+                'remain_qty' => (float) ($data['remain_qty'] ?? 0),
 
                 'notes' => $data['notes'] ?? null,
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
             ]);
 
-            // 6) Insert stok WIP hasil cutting ke wip_items
-            //    Stage: 'cutting', lokasi stok: to_warehouse_id dari external_transfer
-            $warehouseId = $t->to_warehouse_id;
+            // ===== 5) KURANGI STOK KAIN LOT DI KONTRAKAN =====
+            // Logika pemakaian kain:
+            // dipakai = input_qty - remain_qty
+            $inputQty = (float) $data['input_qty'];
+            $remainQty = (float) ($data['remain_qty'] ?? 0);
+            $usedQty = max($inputQty - $remainQty, 0);
+            if ($usedQty > 0) {
+                InventoryService::reduceStockLot([
+                    'warehouse_id' => $mainWarehouseId, // stok kain dianggap milik KONTRAKAN
+                    'lot_id' => $lotId,
+                    'unit' => $uom,
+                    'qty' => $usedQty,
+                    'type' => 'CUTTING_USE',
+                    'ref_code' => $batch->code,
+                    'note' => 'Pemakaian kain untuk cutting ' . $batch->code,
+                    'date' => $today,
+                    'category' => 'rawmaterial',
+                ]);
+            }
+
+            // ===== 6) BUAT WIP CUTTING DI GUDANG KONTRAKAN =====
+            // Ini stok BSJ / potongan siap jahit (belum dibagikan ke penjahit).
+            $warehouseId = $mainWarehouseId;
             $sourceLotId = $lotId;
 
             foreach ($outputItems as $code => $qty) {
                 $itemId = $itemsFound[$code] ?? null;
                 if (!$itemId) {
-                    continue; // harusnya tidak terjadi karena sudah divalidasi
+                    continue;
                 }
 
                 WipItem::create([
                     'production_batch_id' => $batch->id,
                     'item_id' => $itemId,
                     'item_code' => $code,
-                    'warehouse_id' => $warehouseId,
+                    'warehouse_id' => $warehouseId, // KONTRAKAN
                     'source_lot_id' => $sourceLotId,
                     'stage' => 'cutting',
                     'qty' => $qty,
-                    'notes' => 'Auto WIP dari cutting ' . $batch->code,
+                    // kalau sudah ada kolom ini dari migration QC:
+                    'qc_status' => 'pending',
+                    'qc_notes' => null,
+                    'notes' => 'WIP cutting di KONTRAKAN (stok belum jahit) - ' . $batch->code,
                 ]);
             }
-            InventoryService::reduceStockLot([
-                'warehouse_id' => $t->to_warehouse_id, // gudang tempat kain saat dipotong
-                'lot_id' => $lotId,
-                'unit' => $uom,
-                'qty' => $data['input_qty'],
-                'date' => $today->toDateString(),
-                'type' => 'CUTTING_OUT',
-                'ref_code' => $t->code,
-                'note' => 'Cutting dari dokumen ' . $t->code,
-            ]);
-
-            // 7) TODO: integrasi dengan modul Inventory (mutasi stok kain & stok WIP)
         });
 
         return redirect()
             ->route('vendor-cutting.index')
-            ->with('success', "Hasil cutting untuk {$t->code} berhasil disimpan dan stok WIP dibuat.");
+            ->with('success', "Hasil cutting untuk {$t->code} berhasil disimpan, stok kain LOT berkurang, dan WIP dibuat di KONTRAKAN.");
     }
 
     /**

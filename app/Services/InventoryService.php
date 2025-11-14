@@ -2,18 +2,17 @@
 
 namespace App\Services;
 
-use App\Models\InventoryMutation;
 use App\Models\InventoryStock;
 use Illuminate\Support\Facades\DB;
 
 class InventoryService
 {
     /**
-     * Mutasi stok per LOT per gudang.
+     * Mutasi stok per LOT per gudang (low-level).
      *
      * Dipakai oleh:
-     * - PurchaseController@post()           → PURCHASE_IN
-     * - transfer()                         → TRANSFER_IN / TRANSFER_OUT
+     * - PurchaseController@post()  → PURCHASE_IN
+     * - transfer()                → TRANSFER_IN / TRANSFER_OUT
      */
     public function mutate(
         int $warehouseId,
@@ -24,7 +23,8 @@ class InventoryService
         string $unit,
         ?string $refCode = null,
         ?string $note = null,
-        ?string $date = null// YYYY-MM-DD
+        ?string $date = null, // YYYY-MM-DD
+        ?string $category = null
     ): void {
         $date = $date ?: now()->toDateString();
 
@@ -53,21 +53,23 @@ class InventoryService
             $unit,
             $refCode,
             $note,
-            $date
+            $date,
+            $category
         ) {
             // 1) INSERT ke inventory_mutations
             DB::table('inventory_mutations')->insert([
                 'warehouse_id' => $warehouseId,
+                'category' => $category,
                 'lot_id' => $lotId,
                 'item_id' => $lot->item_id,
                 'item_code' => $lot->item_code,
-                'type' => $type, // PURCHASE_IN / TRANSFER_OUT / TRANSFER_IN / dll
+                'type' => $type, // PURCHASE_IN / TRANSFER_OUT / TRANSFER_IN / WIP_... / FG_...
                 'qty_in' => $qtyIn,
                 'qty_out' => $qtyOut,
                 'unit' => $unit,
                 'ref_code' => $refCode,
                 'note' => $note,
-                'date' => $date, // ← pakai $date (tipe DATE)
+                'date' => $date,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -82,7 +84,7 @@ class InventoryService
 
             $qtyNow = (float) ($agg->qty ?? 0);
 
-            // 3) UPDATE / INSERT ke inventory_stocks (per gudang + LOT)
+            // 3) UPDATE / INSERT ke inventory_stocks (per gudang + LOT + unit)
             $existing = DB::table('inventory_stocks')
                 ->where('warehouse_id', $warehouseId)
                 ->where('lot_id', $lotId)
@@ -116,101 +118,115 @@ class InventoryService
     /**
      * Tambah stok (mutasi IN) per gudang + LOT.
      *
-     * $data yang dibutuhkan:
+     * Wajib di $data:
      * - warehouse_id
      * - lot_id
-     * - item_id
-     * - item_code
-     * - unit          (pcs / kg / m)
-     * - qty           (angka posistif)
-     * - date          (Y-m-d)
-     * - type          (string, misal: 'FG_IN')
-     * - ref_code      (misal kode batch / dokumen)
-     * - note          (opsional)
+     * - unit
+     * - qty
+     *
+     * Optional:
+     * - type (default: FG_IN)
+     * - ref_code
+     * - note
+     * - date (Y-m-d, default: today)
+     * - category
+     *
+     * NOTE:
+     * item_id & item_code akan diambil dari LOT agar konsisten.
      */
     public static function addStockLot(array $data): InventoryStock
     {
-        return DB::transaction(function () use ($data) {
-            // 1) Catat mutasi IN
-            InventoryMutation::create([
-                'warehouse_id' => $data['warehouse_id'],
-                'lot_id' => $data['lot_id'],
-                'item_id' => $data['item_id'],
-                'item_code' => $data['item_code'],
-                'type' => $data['type'] ?? 'FG_IN',
-                'qty_in' => $data['qty'],
-                'qty_out' => 0,
-                'unit' => $data['unit'],
-                'ref_code' => $data['ref_code'] ?? null,
-                'note' => $data['note'] ?? null,
-                'date' => $data['date'], // cukup date saja
-            ]);
+        $self = app(self::class);
 
-            // 2) Update saldo di inventory_stocks
-            $stock = InventoryStock::firstOrNew([
-                'warehouse_id' => $data['warehouse_id'],
-                'lot_id' => $data['lot_id'],
-                'unit' => $data['unit'],
-            ]);
+        $warehouseId = $data['warehouse_id'];
+        $lotId = $data['lot_id'];
+        $unit = $data['unit'];
+        $qty = $data['qty'];
+        $type = $data['type'] ?? 'FG_IN';
+        $refCode = $data['ref_code'] ?? null;
+        $note = $data['note'] ?? null;
+        $date = $data['date'] ?? now()->toDateString();
+        $category = $data['category'] ?? null;
 
-            // Pastikan item_id & item_code sync
-            $stock->item_id = $data['item_id'];
-            $stock->item_code = $data['item_code'];
+        $self->mutate(
+            warehouseId: $warehouseId,
+            lotId: $lotId,
+            type: $type,
+            qtyIn: $qty,
+            qtyOut: 0.0,
+            unit: $unit,
+            refCode: $refCode,
+            note: $note,
+            date: $date,
+            category: $category,
+        );
 
-            $stock->qty = ($stock->qty ?? 0) + $data['qty'];
-            $stock->save();
-
-            return $stock;
-        });
+        // Setelah mutate, stok sudah ke-update di inventory_stocks.
+        return InventoryStock::where('warehouse_id', $warehouseId)
+            ->where('lot_id', $lotId)
+            ->where('unit', $unit)
+            ->firstOrFail();
     }
 
     /**
      * Kurangi stok (mutasi OUT) per gudang + LOT.
-     * (Berguna nanti untuk pengeluaran FG: packing, penjualan, dsb.)
+     *
+     * Dipakai untuk:
+     * - pemakaian WIP
+     * - pengeluaran FG untuk packing / jual, dll.
      */
     public static function reduceStockLot(array $data): InventoryStock
     {
-        return DB::transaction(function () use ($data) {
-            $stock = InventoryStock::where('warehouse_id', $data['warehouse_id'])
-                ->where('lot_id', $data['lot_id'])
-                ->where('unit', $data['unit'])
-                ->lockForUpdate()
-                ->firstOrFail();
+        $self = app(self::class);
 
-            if ($stock->qty < $data['qty']) {
-                throw new \RuntimeException('Stok tidak mencukupi untuk mutasi OUT.');
-            }
+        $warehouseId = $data['warehouse_id'];
+        $lotId = $data['lot_id'];
+        $unit = $data['unit'];
+        $qty = $data['qty'];
+        $type = $data['type'] ?? 'FG_OUT';
+        $refCode = $data['ref_code'] ?? null;
+        $note = $data['note'] ?? null;
+        $date = $data['date'] ?? now()->toDateString();
+        $category = $data['category'] ?? null;
+        // dd($qty);
+        dd($warehouseId);
+        // Pastikan stok cukup
+        $stock = InventoryStock::where('warehouse_id', $warehouseId)
+            ->where('lot_id', $lotId)
+            ->where('unit', $unit)
+            ->lockForUpdate()
+            ->first();
 
-            InventoryMutation::create([
-                'warehouse_id' => $data['warehouse_id'],
-                'lot_id' => $data['lot_id'],
-                'item_id' => $stock->item_id,
-                'item_code' => $stock->item_code,
-                'type' => $data['type'] ?? 'FG_OUT',
-                'qty_in' => 0,
-                'qty_out' => $data['qty'],
-                'unit' => $data['unit'],
-                'ref_code' => $data['ref_code'] ?? null,
-                'note' => $data['note'] ?? null,
-                'date' => $data['date'],
-            ]);
+        if (!$stock || $stock->qty < $qty) {
+            throw new \RuntimeException('Stok tidak mencukupi untuk mutasi OUT.');
+        }
 
-            $stock->qty -= $data['qty'];
-            $stock->save();
+        $self->mutate(
+            warehouseId: $warehouseId,
+            lotId: $lotId,
+            type: $type,
+            qtyIn: 0.0,
+            qtyOut: $qty,
+            unit: $unit,
+            refCode: $refCode,
+            note: $note,
+            date: $date,
+            category: $category,
+        );
 
-            return $stock;
-        });
+        // Ambil stok terbaru
+        return InventoryStock::where('warehouse_id', $warehouseId)
+            ->where('lot_id', $lotId)
+            ->where('unit', $unit)
+            ->firstOrFail();
     }
+
     /**
      * Transfer stok antar gudang, per LOT.
-     *
-     * Dipakai oleh:
-     * - ExternalTransferService::send()
      *
      * Akan membuat:
      * - Mutasi TRANSFER_OUT di gudang asal
      * - Mutasi TRANSFER_IN di gudang tujuan
-     * Dan otomatis update inventory_stocks di kedua gudang.
      */
     public function transfer(
         int $fromWarehouseId,
@@ -220,7 +236,8 @@ class InventoryService
         string $unit,
         ?string $refCode = null,
         ?string $note = null,
-        ?string $date = null// YYYY-MM-DD
+        ?string $date = null, // YYYY-MM-DD
+        ?string $category = null
     ): void {
         $date = $date ?: now()->toDateString();
 
@@ -239,6 +256,7 @@ class InventoryService
             refCode: $refCode,
             note: $note ? $note . ' (OUT)' : 'Transfer OUT',
             date: $date,
+            category: $category,
         );
 
         // 🔺 MASUK ke gudang tujuan
@@ -252,6 +270,24 @@ class InventoryService
             refCode: $refCode,
             note: $note ? $note . ' (IN)' : 'Transfer IN',
             date: $date,
+            category: $category,
         );
+    }
+
+    /**
+     * Convenience wrapper: addStock() berbasis LOT (untuk memudahkan pemanggilan).
+     * Wajib: warehouse_id, lot_id, unit, qty
+     */
+    public static function addStock(array $data): InventoryStock
+    {
+        return self::addStockLot($data);
+    }
+
+    /**
+     * Convenience wrapper: removeStock() berbasis LOT.
+     */
+    public static function removeStock(array $data): InventoryStock
+    {
+        return self::reduceStockLot($data);
     }
 }

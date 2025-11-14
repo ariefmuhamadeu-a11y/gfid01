@@ -35,12 +35,18 @@
             <i class="bi bi-scissors"></i><span>Vendor Cutting</span>
         </a>
 
+        {{-- QC WIP Cutting (BARU) --}}
+        <a class="nav-link {{ request()->routeIs('wip_cutting_qc.*') ? 'active' : '' }}"
+            href="{{ route('wip_cutting_qc.index') }}">
+            <i class="bi bi-clipboard-check"></i><span>QC Cutting</span>
+        </a>
+
         {{-- Sewing Internal --}}
         <a class="nav-link {{ request()->routeIs('sewing.*') ? 'active' : '' }}" href="{{ route('sewing.index') }}">
             <i class="bi bi-tools"></i><span>Sewing</span>
         </a>
 
-        {{-- Finishing (UPDATE) --}}
+        {{-- Finishing --}}
         <a class="nav-link {{ request()->routeIs('finishing.*') ? 'active' : '' }}"
             href="{{ route('finishing.index') }}">
             <i class="bi bi-check2-square"></i><span>Finishing</span>
@@ -70,18 +76,15 @@
         {{-- ===================== --}}
         <div class="section">Payroll</div>
 
-        {{-- Tarif per pcs --}}
         <a class="nav-link {{ request()->is('payroll/rates*') ? 'active' : '' }}" href="{{ url('/payroll/rates') }}">
             <i class="bi bi-cash-coin"></i><span>Tarif Per Pcs</span>
         </a>
 
-        {{-- Data gaji --}}
         <a class="nav-link {{ request()->is('payroll/entries*') ? 'active' : '' }}"
             href="{{ url('/payroll/entries') }}">
             <i class="bi bi-person-lines-fill"></i><span>Data Gaji</span>
         </a>
 
-        {{-- Payroll Per PCS --}}
         <a class="nav-link {{ request()->routeIs('payroll.runs.*') ? 'active' : '' }}"
             href="{{ route('payroll.runs.index') }}">
             <i class="bi bi-calculator"></i><span>Payroll per PCS</span>

@@ -10,6 +10,7 @@ use App\Http\Controllers\Production\ExternalTransferController;
 use App\Http\Controllers\Production\FinishingController;
 use App\Http\Controllers\Production\SewingController;
 use App\Http\Controllers\Production\VendorCuttingController;
+use App\Http\Controllers\Production\WipCuttingQcController;
 use App\Http\Controllers\Purchasing\PurchaseController;
 use App\Http\Controllers\Purchasing\PurchasePaymentController;
 
@@ -158,4 +159,12 @@ Route::prefix('payroll/runs')
         Route::get('{payrollRun}', [PayrollPerPieceController::class, 'show'])->name('show');
 
         Route::post('{payrollRun}/post', [PayrollPerPieceController::class, 'post'])->name('post');
+    });
+
+Route::prefix('production/wip-cutting-qc')
+    ->name('wip_cutting_qc.')
+    ->group(function () {
+        Route::get('/', [WipCuttingQcController::class, 'index'])->name('index');
+        Route::get('{wipItem}/edit', [WipCuttingQcController::class, 'edit'])->name('edit');
+        Route::put('{wipItem}', [WipCuttingQcController::class, 'update'])->name('update');
     });
