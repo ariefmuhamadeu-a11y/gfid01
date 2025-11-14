@@ -7,6 +7,7 @@ use App\Models\ExternalTransfer;
 use App\Models\Item;
 use App\Models\ProductionBatch;
 use App\Models\WipItem;
+use App\Services\InventoryService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -197,6 +198,16 @@ class VendorCuttingController extends Controller
                     'notes' => 'Auto WIP dari cutting ' . $batch->code,
                 ]);
             }
+            InventoryService::reduceStockLot([
+                'warehouse_id' => $t->to_warehouse_id, // gudang tempat kain saat dipotong
+                'lot_id' => $lotId,
+                'unit' => $uom,
+                'qty' => $data['input_qty'],
+                'date' => $today->toDateString(),
+                'type' => 'CUTTING_OUT',
+                'ref_code' => $t->code,
+                'note' => 'Cutting dari dokumen ' . $t->code,
+            ]);
 
             // 7) TODO: integrasi dengan modul Inventory (mutasi stok kain & stok WIP)
         });

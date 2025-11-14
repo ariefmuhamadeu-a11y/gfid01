@@ -133,7 +133,7 @@
             padding: .18rem .55rem;
         }
 
-        /* Qty rapi: sign | number | unit */
+        /* Qty rapi */
         .qty-cell {
             display: grid;
             grid-template-columns: auto minmax(5.2rem, auto) auto;
@@ -142,11 +142,6 @@
             column-gap: .35rem;
             white-space: nowrap;
             font-variant-numeric: tabular-nums
-        }
-
-        .qty-sign {
-            width: 1ch;
-            text-align: right
         }
 
         .qty-num {
@@ -172,12 +167,6 @@
             color: var(--muted)
         }
 
-        .val-num {
-            min-width: 6.2rem;
-            display: inline-block;
-            text-align: right
-        }
-
         @media(max-width:768px) {
             .hide-sm {
                 display: none
@@ -200,15 +189,14 @@
         <div class="d-flex align-items-center justify-content-between mb-3">
             <div>
                 <h5 class="mb-0">Inventory • Mutations</h5>
-                <div class="muted small">Jejak mutasi per hari, lengkap dengan subtotal & nilai</div>
+                <div class="muted small">Jejak mutasi per hari, fokus ke qty IN/OUT (tanpa nilai uang).</div>
             </div>
             <a class="btn btn-ghost btn-sm" href="{{ route('inventory.mutations.index') }}">Reset</a>
         </div>
 
-        {{-- KPI BAR (selaras kpi purchasing) --}}
+        {{-- KPI BAR --}}
         @php
             $numf = fn($v, $d = 2) => number_format((float) $v, $d, ',', '.');
-            $idr = fn($v) => 'Rp ' . number_format((float) $v, 0, ',', '.');
             $tIn = (float) ($totalIn ?? 0);
             $tOut = (float) ($totalOut ?? 0);
             $tNet = $tIn - $tOut;
@@ -217,13 +205,13 @@
             <div class="col-6 col-md-4">
                 <div class="card kpi">
                     <div class="label">Total IN</div>
-                    <div class="value mono kpi-in">+ {{ $numf($tIn, 2) }}</div>
+                    <div class="value mono kpi-in">{{ $numf($tIn, 2) }}</div>
                 </div>
             </div>
             <div class="col-6 col-md-4">
                 <div class="card kpi">
                     <div class="label">Total OUT</div>
-                    <div class="value mono kpi-out">− {{ $numf($tOut, 2) }}</div>
+                    <div class="value mono kpi-out">{{ $numf($tOut, 2) }}</div>
                 </div>
             </div>
             <div class="col-12 col-md-4">
@@ -234,7 +222,7 @@
             </div>
         </div>
 
-        {{-- QUICK FILTER CHIPS (selaras tampilan purchasing) --}}
+        {{-- QUICK FILTER CHIPS --}}
         <div class="d-flex flex-wrap gap-2 mb-3 chips">
             @php
                 $baseParams = [
@@ -264,7 +252,7 @@
             @endforeach
         </div>
 
-        {{-- FILTER BAR (auto-apply realtime seperti purchasing) --}}
+        {{-- FILTER BAR --}}
         <form method="GET" action="{{ route('inventory.mutations.index') }}" class="card soft p-3 mb-3 filter"
             id="mutFilter">
             <div class="row g-2">
@@ -284,7 +272,9 @@
                     <select name="warehouse" class="form-select">
                         <option value="">Gudang</option>
                         @foreach ($warehouses ?? collect() as $w)
-                            <option value="{{ $w->id }}" @selected((string) request('warehouse') === (string) $w->id)>{{ $w->name }}</option>
+                            <option value="{{ $w->id }}" @selected((string) request('warehouse') === (string) $w->id)>
+                                {{ $w->name }}
+                            </option>
                         @endforeach
                     </select>
                 </div>
@@ -305,11 +295,11 @@
                         <tr>
                             <th style="width:110px">Tanggal</th>
                             <th style="width:110px">Tipe</th>
-                            <th style="width:140px">Item</th>
-                            <th class="text-end" style="width:120px">Harga</th>
-                            <th class="text-end" style="width:180px">Qty</th>
-                            <th class="text-end" style="width:110px">Net</th>
-                            <th class="text-end" style="width:150px">Nilai</th>
+                            <th style="width:160px">Item</th>
+                            <th style="width:160px">Gudang</th>
+                            <th class="text-end" style="width:140px">Qty IN</th>
+                            <th class="text-end" style="width:140px">Qty OUT</th>
+                            <th class="text-end" style="width:120px">Net</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -321,43 +311,24 @@
                                 $sumIn = (float) ($grp['sum_in'] ?? 0);
                                 $sumOut = (float) ($grp['sum_out'] ?? 0);
                                 $netDay = $sumIn - $sumOut;
-
-                                $sumValIn = 0.0;
-                                $sumValOut = 0.0;
-                                foreach ($items as $gRow) {
-                                    $uc = (float) ($gRow->unit_cost ?? ($gRow->lot->unit_cost ?? 0));
-                                    $sumValIn += ((float) ($gRow->qty_in ?? 0)) * $uc;
-                                    $sumValOut += ((float) ($gRow->qty_out ?? 0)) * $uc;
-                                }
-                                $sumValNet = $sumValIn - $sumValOut;
                             @endphp
 
                             {{-- SUBTOTAL HARI --}}
                             <tr>
-                                <td class="py-2"><span class="sub-badge mono">{{ $dateKey }}</span></td>
+                                <td class="py-2">
+                                    <span class="sub-badge mono">{{ $dateKey }}</span>
+                                </td>
                                 <td class="py-2 muted">Subtotal</td>
                                 <td class="py-2 muted">—</td>
-                                <td class="py-2 text-end muted">—</td>
-                                <td class="py-2 text-end">
-                                    <div class="qty-cell mono">
-                                        <span class="qty-sign">&nbsp;</span>
-                                        <span class="qty-num">
-                                            @if ($sumIn > 0)
-                                                <span class="qty-in">+ {{ $numf($sumIn, 2) }}</span>
-                                            @endif
-                                            @if ($sumOut > 0)
-                                                <span class="qty-out ms-2">− {{ $numf($sumOut, 2) }}</span>
-                                            @endif
-                                            @if ($sumIn == 0 && $sumOut == 0)
-                                                <span class="qty-zero">0,00</span>
-                                            @endif
-                                        </span>
-                                        <span class="qty-unit"></span>
-                                    </div>
-                                </td>
-                                <td class="py-2 text-end mono">{{ $netDay >= 0 ? '+' : '−' }} {{ $numf(abs($netDay), 2) }}</td>
+                                <td class="py-2 muted">—</td>
                                 <td class="py-2 text-end mono">
-                                    <span class="val-num">{{ $sumValNet >= 0 ? '+' : '−' }} {{ $idr(abs($sumValNet)) }}</span>
+                                    {{ $sumIn > 0 ? $numf($sumIn, 2) : '0,00' }}
+                                </td>
+                                <td class="py-2 text-end mono">
+                                    {{ $sumOut > 0 ? $numf($sumOut, 2) : '0,00' }}
+                                </td>
+                                <td class="py-2 text-end mono">
+                                    {{ $netDay >= 0 ? '+' : '−' }} {{ $numf(abs($netDay), 2) }}
                                 </td>
                             </tr>
 
@@ -368,37 +339,58 @@
                                     $qOut = (float) ($row->qty_out ?? 0);
                                     $net = $qIn - $qOut;
 
-                                    $uc = (float) ($row->unit_cost ?? ($row->lot->unit_cost ?? 0));
-                                    $val = $qIn > 0 ? $qIn * $uc : ($qOut > 0 ? -$qOut * $uc : 0);
+                                    $itemCode = $row->item_code;
+                                    $wh = ($warehouses ?? collect())->firstWhere('id', (int) $row->warehouse_id);
+                                    $whLabel = $wh ? $wh->code . ' — ' . $wh->name : '-';
 
-                                    $sign = $qOut > 0 ? '−' : ($qIn > 0 ? '+' : ' ');
-                                    $num = $qOut > 0 ? $qOut : ($qIn > 0 ? $qIn : 0);
-                                    $tone = $qOut > 0 ? 'qty-out' : ($qIn > 0 ? 'qty-in' : 'qty-zero');
-
-                                    $itemCode = $row->item_code ?? ($row->lot->item->code ?? '—');
-                                    $href = route('inventory.mutations.show', $row->id);
+                                    $href = route('inventory.mutations.show', $row->id ?? 0);
                                 @endphp
                                 <tr class="row-link" data-href="{{ $href }}">
-                                    <td class="mono muted">{{ \Carbon\Carbon::parse($row->date)->format('H:i') }}</td>
-                                    <td><span class="badge bg-light text-dark mono">{{ $row->type ?? '—' }}</span></td>
-                                    <td class="mono">{{ $itemCode }}</td>
-                                    <td class="text-end mono">{{ $idr($uc) }}</td>
+                                    {{-- Jam --}}
+                                    <td class="mono muted">
+                                        {{ \Carbon\Carbon::parse($row->date)->format('d M Y H:i') }}
+                                    </td>
+
+                                    {{-- Tipe --}}
+                                    <td>
+                                        <span class="badge bg-light text-dark mono">
+                                            {{ $row->type ?? '—' }}
+                                        </span>
+                                    </td>
+
+                                    {{-- Item --}}
+                                    <td class="mono">
+                                        {{ $itemCode ?? '—' }}
+                                    </td>
+
+                                    {{-- Gudang --}}
+                                    <td>
+                                        <span class="muted small">{{ $whLabel }}</span>
+                                    </td>
+
+                                    {{-- Qty IN --}}
                                     <td class="text-end">
                                         <div class="qty-cell mono">
-                                            <span class="qty-sign {{ $tone }}">{{ $sign }}</span>
-                                            <span class="qty-num {{ $tone }}">{{ $numf($num, 2) }}</span>
+                                            <span class="qty-num qty-in">
+                                                {{ $qIn > 0 ? $numf($qIn, 2) : '0,00' }}
+                                            </span>
                                             <span class="qty-unit">{{ $row->unit ?? '' }}</span>
                                         </div>
                                     </td>
-                                    <td class="text-end mono">{{ $net >= 0 ? '+' : '−' }} {{ $numf(abs($net), 2) }}</td>
+
+                                    {{-- Qty OUT --}}
+                                    <td class="text-end">
+                                        <div class="qty-cell mono">
+                                            <span class="qty-num qty-out">
+                                                {{ $qOut > 0 ? $numf($qOut, 2) : '0,00' }}
+                                            </span>
+                                            <span class="qty-unit">{{ $row->unit ?? '' }}</span>
+                                        </div>
+                                    </td>
+
+                                    {{-- Net --}}
                                     <td class="text-end mono">
-                                        @if ($val > 0)
-                                            <span class="val-num">{{ $idr($val) }}</span>
-                                        @elseif ($val < 0)
-                                            <span class="val-num">− {{ $idr(abs($val)) }}</span>
-                                        @else
-                                            <span class="val-num muted">Rp 0</span>
-                                        @endif
+                                        {{ $net >= 0 ? '+' : '−' }} {{ $numf(abs($net), 2) }}
                                     </td>
                                 </tr>
                             @endforeach
@@ -429,7 +421,7 @@
                 });
             });
 
-            // Filter auto-apply (selaras purchasing: debounce 500ms untuk input teks)
+            // Filter auto-apply (debounce 500ms)
             const form = document.getElementById('mutFilter');
             if (!form) return;
 
@@ -460,7 +452,7 @@
                 el.addEventListener('change', submitFiltered);
             });
 
-            // ESC untuk clear cepat field teks aktif
+            // ESC untuk clear field teks aktif
             form.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && document.activeElement instanceof HTMLInputElement) {
                     const el = document.activeElement;
