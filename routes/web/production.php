@@ -4,6 +4,7 @@ use App\Http\Controllers\Production\FinishingController;
 use App\Http\Controllers\Production\SewingController;
 use App\Http\Controllers\Production\VendorCuttingController;
 use App\Http\Controllers\Production\WipCuttingQcController;
+use App\Http\Controllers\Production\WipSewingController;
 use Illuminate\Support\Facades\Route;
 
 // SEWING
@@ -79,6 +80,39 @@ Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
 
                 Route::post('/{batch}', [WipCuttingQcController::class, 'update'])
                     ->name('update');
+            });
+
+        // ==========================
+        // WIP SEWING
+        // ==========================
+        Route::prefix('wip-sewing')
+            ->name('wip_sewing.')
+            ->group(function () {
+
+                // Daftar batch yang sudah qc_done & status sewing
+                Route::get('/', [WipSewingController::class, 'index'])
+                    ->name('index');
+
+                // Halaman konfirmasi pembuatan Sewing Batch dari ProductionBatch
+                Route::get('/create-from-batch/{batch}', [WipSewingController::class, 'createFromBatch'])
+                    ->name('create_from_batch');
+
+                // Proses simpan sewing_batch + sewing_bundle_lines (AUTO GENERATE)
+                Route::post('/create-from-batch/{batch}', [WipSewingController::class, 'storeFromBatch'])
+                    ->name('store_from_batch');
+
+                // Untuk next step (lihat / edit / complete sewing)
+                Route::get('/{sewingBatch}', [WipSewingController::class, 'show'])
+                    ->name('show');
+
+                Route::get('/{sewingBatch}/edit', [WipSewingController::class, 'edit'])
+                    ->name('edit');
+
+                Route::put('/{sewingBatch}', [WipSewingController::class, 'update'])
+                    ->name('update');
+
+                Route::post('/{sewingBatch}/complete', [WipSewingController::class, 'complete'])
+                    ->name('complete');
             });
 
     });

@@ -119,4 +119,9 @@ class ProductionBatch extends Model
         return $this->hasMany(ProductionBatchMaterial::class);
     }
 
+    public function sewingBatches()
+    {
+        return $this->hasMany(SewingBatch::class);
+    }
+
 }

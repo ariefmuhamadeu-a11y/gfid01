@@ -50,4 +50,10 @@ class CuttingBundle extends Model
     {
         return $this->belongsTo(Item::class, 'item_id');
     }
+
+    public function productionBatch()
+    {
+        return $this->belongsTo(ProductionBatch::class);
+    }
+
 }
