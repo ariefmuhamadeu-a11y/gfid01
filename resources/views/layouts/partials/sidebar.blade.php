@@ -8,6 +8,7 @@
             <i class="bi bi-speedometer2"></i><span>Dashboard</span>
         </a>
 
+
         {{-- ===================== --}}
         <div class="section">Purchasing</div>
 
@@ -22,10 +23,11 @@
             </a>
         @endif
 
+
         {{-- ===================== --}}
         <div class="section">Produksi</div>
 
-        {{-- External Transfer (INVENTORY • admin only sesuai middleware route:admin) --}}
+        {{-- External Transfer (admin only sesuai middleware) --}}
         @if (auth()->user()->hasRole('admin'))
             <a class="nav-link {{ request()->routeIs('inventory.external_transfers.*') ? 'active' : '' }}"
                 href="{{ route('inventory.external_transfers.index') }}">
@@ -33,7 +35,7 @@
             </a>
         @endif
 
-        {{-- Vendor Cutting (cutting + admin) --}}
+        {{-- Vendor Cutting --}}
         @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('cutting'))
             <a class="nav-link {{ request()->routeIs('production.vendor_cutting.*') ? 'active' : '' }}"
                 href="{{ route('production.vendor_cutting.index') }}">
@@ -41,7 +43,7 @@
             </a>
         @endif
 
-        {{-- QC WIP Cutting (qc + admin) --}}
+        {{-- QC Cutting --}}
         @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('qc'))
             <a class="nav-link {{ request()->routeIs('production.wip_cutting_qc.*') ? 'active' : '' }}"
                 href="{{ route('production.wip_cutting_qc.index') }}">
@@ -49,7 +51,15 @@
             </a>
         @endif
 
-        {{-- Sewing (sewing + admin) --}}
+        {{-- WIP Sewing (pakai nama route: production.wip_sewing.*) --}}
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('sewing') || auth()->user()->hasRole('owner'))
+            <a class="nav-link {{ request()->routeIs('production.wip_sewing.*') ? 'active' : '' }}"
+                href="{{ route('production.wip_sewing.index') }}">
+                <i class="bi bi-scissors"></i><span>WIP Sewing</span>
+            </a>
+        @endif
+
+        {{-- Sewing lama (kalau masih dipakai) --}}
         @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('sewing') || auth()->user()->hasRole('owner'))
             <a class="nav-link {{ request()->routeIs('sewing.*') ? 'active' : '' }}"
                 href="{{ route('sewing.index') }}">
@@ -57,8 +67,8 @@
             </a>
         @endif
 
-        {{-- Finishing (finishing + admin + owner) --}}
-        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('owner') || auth()->user()->hasRole('finishing'))
+        {{-- Finishing --}}
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('finishing') || auth()->user()->hasRole('owner'))
             <a class="nav-link {{ request()->routeIs('finishing.*') ? 'active' : '' }}"
                 href="{{ route('finishing.index') }}">
                 <i class="bi bi-check2-square"></i><span>Finishing</span>
@@ -69,7 +79,6 @@
         {{-- ===================== --}}
         <div class="section">Inventory</div>
 
-        {{-- Middleware route:admin → cuma admin yang bisa akses --}}
         @if (auth()->user()->hasRole('admin'))
             {{-- Mutasi --}}
             <a class="nav-link {{ request()->is('inventory/mutations*') ? 'active' : '' }}"
