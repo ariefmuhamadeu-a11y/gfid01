@@ -15,24 +15,23 @@ class WipItem extends Model
         'production_batch_id',
         'item_id',
         'item_code',
-        'warehouse_id',
-        'source_lot_id',
         'stage',
         'qty',
+        'unit',
+        'warehouse_id',
+        'status',
         'notes',
     ];
 
     protected $casts = [
-        'qty' => 'float',
+        'qty' => 'decimal:4',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | RELATIONSHIPS
-    |--------------------------------------------------------------------------
-     */
+    /* ============
+     * RELATION
+     * ============ */
 
-    public function productionBatch()
+    public function batch()
     {
         return $this->belongsTo(ProductionBatch::class, 'production_batch_id');
     }
@@ -47,75 +46,17 @@ class WipItem extends Model
         return $this->belongsTo(Warehouse::class, 'warehouse_id');
     }
 
-    public function sourceLot()
-    {
-        return $this->belongsTo(Lot::class, 'source_lot_id');
-    }
+    /* ============
+     * SCOPES
+     * ============ */
 
-    /*
-    |--------------------------------------------------------------------------
-    | ACCESSORS / HELPERS
-    |--------------------------------------------------------------------------
-     */
-
-    public function isCuttingStage(): bool
-    {
-        return $this->stage === 'cutting';
-    }
-
-    public function isSewingStage(): bool
-    {
-        return $this->stage === 'sewing';
-    }
-
-    public function isFinishingStage(): bool
-    {
-        return $this->stage === 'finishing';
-    }
-
-    public function getDisplayLabelAttribute(): string
-    {
-        $code = $this->item_code;
-        $qty = number_format($this->qty, 2);
-        $wh = $this->warehouse?->code ?? '-';
-
-        return "{$code} • {$qty} pcs @ {$wh}";
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | SCOPES
-    |--------------------------------------------------------------------------
-     */
-
-    public function scopeStage($q, string $stage)
-    {
-        return $q->where('stage', $stage);
-    }
-
-    public function scopeAvailable($q)
-    {
-        return $q->where('qty', '>', 0);
-    }
-
-    public function scopeForWarehouse($q, int $warehouseId)
-    {
-        return $q->where('warehouse_id', $warehouseId);
-    }
-
-// Susulan 001
-    public function scopeStageCutting($q)
+    public function scopeCutting($q)
     {
         return $q->where('stage', 'cutting');
     }
 
-    public function scopeQcPending($q)
+    public function scopeAvailable($q)
     {
-        return $q->where('qc_status', 'pending');
-    }
-
-    public function components()
-    {
-        return $this->hasMany(WipComponent::class, 'wip_item_id');
+        return $q->where('status', 'available');
     }
 }

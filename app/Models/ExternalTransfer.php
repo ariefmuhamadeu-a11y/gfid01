@@ -2,35 +2,26 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\ExternalTransferLine;
+use App\Models\ProductionBatch;
+use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
 
 class ExternalTransfer extends Model
 {
-    use HasFactory;
-
-    protected $table = 'external_transfers';
-
     protected $fillable = [
         'code',
-        'date',
         'from_warehouse_id',
         'to_warehouse_id',
-        'operator_code',
-        'process',
+        'date',
         'status',
         'notes',
+        'created_by',
     ];
 
     protected $casts = [
         'date' => 'date',
     ];
-
-    /*
-    |--------------------------------------------------------------------------
-    | RELATIONSHIPS
-    |--------------------------------------------------------------------------
-     */
 
     public function fromWarehouse()
     {
@@ -47,56 +38,8 @@ class ExternalTransfer extends Model
         return $this->hasMany(ExternalTransferLine::class);
     }
 
-    public function batches()
+    public function productionBatch()
     {
-        // Semua production_batches yang link ke dokumen ini
-        return $this->hasMany(ProductionBatch::class, 'external_transfer_id');
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | ACCESSORS / HELPERS
-    |--------------------------------------------------------------------------
-     */
-
-    public function isCutting(): bool
-    {
-        return $this->process === 'cutting';
-    }
-
-    public function isSent(): bool
-    {
-        return $this->status === 'sent';
-    }
-
-    public function isReceived(): bool
-    {
-        return $this->status === 'received';
-    }
-
-    public function isDone(): bool
-    {
-        return $this->status === 'done';
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | SCOPES
-    |--------------------------------------------------------------------------
-     */
-
-    public function scopeCutting($q)
-    {
-        return $q->where('process', 'cutting');
-    }
-
-    public function scopeForProcess($q, string $process)
-    {
-        return $q->where('process', $process);
-    }
-
-    public function scopeStatus($q, string $status)
-    {
-        return $q->where('status', $status);
+        return $this->hasOne(ProductionBatch::class, 'external_transfer_id');
     }
 }

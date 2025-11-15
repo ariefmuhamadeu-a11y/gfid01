@@ -22,7 +22,7 @@ return new class extends Migration
             $t->string('item_code', 50);
 
             // Informasi komponen
-            $t->decimal('qty', 18, 4);
+            $t->decimal('qty', 18, 2);
             $t->string('unit', 16)->nullable();
 
             // Jenis (rib, karet, elastic, tali serut, dsb.)

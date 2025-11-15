@@ -3,266 +3,364 @@
 namespace App\Http\Controllers\Production;
 
 use App\Http\Controllers\Controller;
+use App\Models\CuttingBundle;
 use App\Models\ExternalTransfer;
+use App\Models\InventoryStock;
 use App\Models\Item;
+use App\Models\Lot;
 use App\Models\ProductionBatch;
-use App\Models\Warehouse;
-use App\Models\WipItem;
-use App\Services\InventoryService;
+use App\Models\ProductionBatchMaterial;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class VendorCuttingController extends Controller
 {
     /**
-     * List dokumen external transfer (cutting) yang siap / sedang diproses vendor.
-     * Hanya ambil yang process = cutting dan status sent / received.
+     * INDEX
+     * - Operator cutting: lihat kiriman ke gudang cutting miliknya
+     * - Owner/Admin: lihat semua external transfer terkait cutting
      */
-    public function index()
+    public function index(Request $request)
     {
-        $rows = ExternalTransfer::withCount('lines')
-            ->where('process', 'cutting')
-            ->whereIn('status', ['sent', 'received'])
-            ->orderByDesc('date')
-            ->orderByDesc('id')
-            ->paginate(30);
+        $user = $request->user();
+        $employee = $user->employee ?? null;
 
-        return view('production.vendor_cutting.index', compact('rows'));
+        // ambil role, bisa dari user atau employee
+        $role = $user->role ?? ($employee->role ?? null);
+
+        $q = ExternalTransfer::query()
+            ->with(['fromWarehouse', 'toWarehouse', 'productionBatch'])
+            ->orderByDesc('date');
+
+        // Jika BUKAN owner/admin → filter per gudang cutting operator
+        if (!in_array($role, ['owner', 'admin'])) {
+            if (!$employee || !$employee->cutting_warehouse_id) {
+                abort(403, 'Employee ini belum di-mapping ke gudang cutting.');
+            }
+
+            $cuttingWarehouseId = $employee->cutting_warehouse_id;
+
+            $q->where('to_warehouse_id', $cuttingWarehouseId);
+        }
+
+        // Hanya status yang relevan untuk cutting
+        $q->whereIn('status', ['SENT', 'sent', 'BATCHED', 'batched']);
+
+        // Filter pencarian kode (optional)
+        if ($search = $request->get('q')) {
+            $q->where('code', 'like', "%{$search}%");
+        }
+
+        $transfers = $q->paginate(20);
+
+        return view('production.vendor_cutting.index', compact('transfers', 'role'));
     }
 
     /**
-     * Form proses cutting untuk satu external transfer.
-     * - tampilkan info pengiriman & lot kain
-     * - input hasil cutting (barang setengah jadi / WIP)
+     * FORM terima bahan & buat batch cutting
      */
-    public function create(ExternalTransfer $externalTransfer)
+    public function receiveForm(Request $request, ExternalTransfer $externalTransfer)
     {
-        // safety: hanya boleh cutting & status sent/received
-        if ($externalTransfer->process !== 'cutting' || !in_array($externalTransfer->status, ['sent', 'received'])) {
+        $user = $request->user();
+        $employee = $user->employee ?? null;
+        $role = $user->role ?? ($employee->role ?? null);
+
+        // Owner/admin boleh buka semua, cutting harus sesuai gudang
+        if (!in_array($role, ['owner', 'admin'])) {
+            $cuttingWarehouseId = $employee->cutting_warehouse_id ?? null;
+
+            if ($externalTransfer->to_warehouse_id !== $cuttingWarehouseId) {
+                abort(403, 'Tidak boleh memproses transfer untuk gudang lain.');
+            }
+        }
+
+        // Kalau sudah punya batch, langsung redirect ke showBatch
+        if ($externalTransfer->productionBatch) {
             return redirect()
-                ->route('vendor-cutting.index')
-                ->with('error', 'Dokumen ini tidak bisa diproses cutting.');
+                ->route('production.vendor_cutting.batches.show', $externalTransfer->productionBatch->id);
         }
 
-        $externalTransfer->load(['fromWarehouse', 'toWarehouse', 'lines.lot', 'lines.item']);
+        $externalTransfer->load(['lines.lot', 'fromWarehouse', 'toWarehouse']);
 
-        // Hitung total qty kain (input)
-        $inputQty = $externalTransfer->lines->sum('qty');
-        $inputUom = optional($externalTransfer->lines->first())->uom ?? 'kg';
-
-        // Item barang jadi / WIP yang boleh dipilih sebagai hasil cutting.
-        // Untuk sementara, ambil semua items; nanti bisa difilter by type.
-        $finishedItems = Item::orderBy('code')
-            ->select('id', 'code', 'name')
-            ->limit(500)
-            ->get();
-
-        return view('production.vendor_cutting.create', [
-            't' => $externalTransfer,
-            'inputQty' => $inputQty,
-            'inputUom' => $inputUom,
-            'finishedItems' => $finishedItems,
+        return view('production.vendor_cutting.confirm_receive', [
+            'transfer' => $externalTransfer,
         ]);
     }
 
     /**
-     * Simpan hasil cutting:
-     * - jika status awal sent → ubah ke received (konfirmasi bahan diterima)
-     * - buat 1 production_batch (process = cutting)
+     * STORE: buat batch cutting dari external transfer
      */
-    public function store($externalTransferId, Request $request)
+    public function receiveStore(Request $request, ExternalTransfer $externalTransfer)
     {
-        // Ambil header + lines External Transfer (cutting)
-        $t = ExternalTransfer::with('lines')
-            ->where('process', 'cutting')
-            ->whereIn('status', ['sent', 'received'])
-            ->findOrFail($externalTransferId);
+        $user = $request->user();
+        $employee = $user->employee ?? null;
+        $role = $user->role ?? ($employee->role ?? null);
 
-        // =============== VALIDASI INPUT FORM ===============
+        if (!in_array($role, ['owner', 'admin'])) {
+            $cuttingWarehouseId = $employee->cutting_warehouse_id ?? null;
+
+            if ($externalTransfer->to_warehouse_id !== $cuttingWarehouseId) {
+                abort(403, 'Tidak boleh memproses transfer untuk gudang lain.');
+            }
+        }
+
+        // Jika sudah punya batch, jangan dobel
+        if ($externalTransfer->productionBatch) {
+            return redirect()
+                ->route('production.vendor_cutting.batches.show', $externalTransfer->productionBatch->id)
+                ->with('info', 'Dokumen ini sudah memiliki batch cutting.');
+        }
+
+        if (!in_array($externalTransfer->status, ['SENT', 'sent'])) {
+            return back()->withErrors('Dokumen ini tidak dalam status SENT.');
+        }
+
         $data = $request->validate([
-            'input_qty' => ['required', 'numeric', 'min:0'],
-            'input_uom' => ['nullable', 'string', 'max:10'],
-            'waste_qty' => ['nullable', 'numeric', 'min:0'],
-            'remain_qty' => ['nullable', 'numeric', 'min:0'],
+            'date_received' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
-
-            'results' => ['required', 'array', 'min:1'],
-            'results.*.item_code' => ['required', 'string', 'max:50'],
-            'results.*.item_name' => ['nullable', 'string', 'max:255'],
-            'results.*.qty' => ['required', 'numeric', 'min:1'],
-        ], [
-            'results.required' => 'Minimal satu baris hasil cutting harus diisi.',
         ]);
 
-        // Susun hasil cutting: [item_code => total_qty]
-        $outputItems = [];
-        foreach ($data['results'] as $row) {
-            $code = trim($row['item_code']);
-            $qty = (float) $row['qty'];
+        $externalTransfer->load('lines.lot');
 
-            if ($code === '' || $qty <= 0) {
-                continue;
-            }
+        // Cek stok LOT di gudang tujuan
+        foreach ($externalTransfer->lines as $line) {
+            $stock = InventoryStock::where('warehouse_id', $externalTransfer->to_warehouse_id)
+                ->where('lot_id', $line->lot_id)
+                ->first();
 
-            if (!isset($outputItems[$code])) {
-                $outputItems[$code] = 0;
+            if (!$stock || $stock->qty < $line->qty) {
+                return back()->withErrors(
+                    'Stok LOT ' . ($line->lot->code ?? 'UNKNOWN') . ' di gudang cutting tidak cukup (qty: ' . ($stock->qty ?? 0) . ').'
+                );
             }
-            $outputItems[$code] += $qty;
         }
 
-        if (empty($outputItems)) {
-            throw ValidationException::withMessages([
-                'results' => 'Tidak ada data hasil cutting yang valid.',
+        $operatorCode = $employee->code ?? $user->name;
+
+        // Generate kode batch
+        $batchCode = $this->generateCuttingBatchCode();
+
+        // Buat ProductionBatch
+        $batch = ProductionBatch::create([
+            'code' => $batchCode,
+            'stage' => 'cutting',
+            'status' => 'received',
+            'operator_code' => $operatorCode,
+            'from_warehouse_id' => $externalTransfer->from_warehouse_id,
+            'to_warehouse_id' => $externalTransfer->to_warehouse_id,
+            'external_transfer_id' => $externalTransfer->id,
+            'date_received' => $data['date_received'],
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        // Detail bahan
+        foreach ($externalTransfer->lines as $line) {
+            ProductionBatchMaterial::create([
+                'production_batch_id' => $batch->id,
+                'lot_id' => $line->lot_id,
+                'item_id' => $line->item_id,
+                'item_code' => $line->item_code,
+                'qty_planned' => $line->qty,
+                'unit' => $line->unit,
             ]);
         }
 
-        // Pastikan semua item hasil cutting sudah ada di master items
-        $codes = array_keys($outputItems);
-        $itemsFound = Item::whereIn('code', $codes)->pluck('id', 'code');
-
-        $missing = array_diff($codes, $itemsFound->keys()->all());
-        if (count($missing) > 0) {
-            throw ValidationException::withMessages([
-                'results' => 'Kode item berikut belum terdaftar di master items: ' . implode(', ', $missing),
-            ]);
-        }
-
-        // Cari gudang utama / KONTRAKAN (gudang stok kain & WIP)
-        $mainWarehouseId = Warehouse::where('code', 'KONTRAKAN')->value('id');
-        if (!$mainWarehouseId) {
-            throw new \RuntimeException('Warehouse dengan code "KONTRAKAN" tidak ditemukan.');
-        }
-
-        DB::transaction(function () use ($t, $data, $outputItems, $itemsFound, $mainWarehouseId) {
-            $today = now()->toDateString();
-
-            // ===== 1) UPDATE STATUS EXTERNAL TRANSFER =====
-            if ($t->status === 'sent') {
-                $t->status = 'received';
-            }
-            $t->status = 'done';
-            $t->save();
-
-            // ===== 2) INFO LOT & UOM DARI BARIS PERTAMA =====
-            $firstLine = $t->lines->first();
-            $lotId = $firstLine?->lot_id;
-            $uom = $data['input_uom'] ?: ($firstLine?->unit ?? 'kg');
-
-            if (!$lotId) {
-                throw new \RuntimeException('External Transfer cutting tidak memiliki LOT.');
-            }
-
-            $outputTotal = array_sum($outputItems);
-
-            // ===== 3) GENERATE KODE BATCH CUTTING =====
-            $prefix = 'BCH-CUT';
-            $countToday = ProductionBatch::whereDate('date', $today)
-                ->where('process', 'cutting')
-                ->count();
-
-            $seq = str_pad($countToday + 1, 3, '0', STR_PAD_LEFT);
-            $code = $prefix . '-' . date('ymd', strtotime($today)) . '-' . $seq;
-
-            // ===== 4) SIMPAN PRODUCTION BATCH (CUTTING) =====
-            $batch = ProductionBatch::create([
-                'code' => $code,
-                'date' => $today,
-                'process' => 'cutting',
-                'status' => 'done',
-
-                'external_transfer_id' => $t->id,
-                'lot_id' => $lotId,
-
-                // proses fisik terjadi di vendor (to_warehouse dari ET)
-                'from_warehouse_id' => $t->to_warehouse_id,
-                // hasil & WIP kita anggap ada di KONTRAKAN
-                'to_warehouse_id' => $mainWarehouseId,
-
-                'operator_code' => $t->operator_code,
-
-                'input_qty' => (float) $data['input_qty'],
-                'input_uom' => $uom,
-
-                'output_total_pcs' => $outputTotal,
-                'output_items_json' => $outputItems, // cast json di model kalau mau
-
-                'waste_qty' => (float) ($data['waste_qty'] ?? 0),
-                'remain_qty' => (float) ($data['remain_qty'] ?? 0),
-
-                'notes' => $data['notes'] ?? null,
-                'created_by' => auth()->id(),
-                'updated_by' => auth()->id(),
-            ]);
-
-            // ===== 5) KURANGI STOK KAIN LOT DI KONTRAKAN =====
-            // Logika pemakaian kain:
-            // dipakai = input_qty - remain_qty
-            $inputQty = (float) $data['input_qty'];
-            $remainQty = (float) ($data['remain_qty'] ?? 0);
-            $usedQty = max($inputQty - $remainQty, 0);
-            if ($usedQty > 0) {
-                InventoryService::reduceStockLot([
-                    'warehouse_id' => $mainWarehouseId, // stok kain dianggap milik KONTRAKAN
-                    'lot_id' => $lotId,
-                    'unit' => $uom,
-                    'qty' => $usedQty,
-                    'type' => 'CUTTING_USE',
-                    'ref_code' => $batch->code,
-                    'note' => 'Pemakaian kain untuk cutting ' . $batch->code,
-                    'date' => $today,
-                    'category' => 'rawmaterial',
-                ]);
-            }
-
-            // ===== 6) BUAT WIP CUTTING DI GUDANG KONTRAKAN =====
-            // Ini stok BSJ / potongan siap jahit (belum dibagikan ke penjahit).
-            $warehouseId = $mainWarehouseId;
-            $sourceLotId = $lotId;
-
-            foreach ($outputItems as $code => $qty) {
-                $itemId = $itemsFound[$code] ?? null;
-                if (!$itemId) {
-                    continue;
-                }
-
-                WipItem::create([
-                    'production_batch_id' => $batch->id,
-                    'item_id' => $itemId,
-                    'item_code' => $code,
-                    'warehouse_id' => $warehouseId, // KONTRAKAN
-                    'source_lot_id' => $sourceLotId,
-                    'stage' => 'cutting',
-                    'qty' => $qty,
-                    // kalau sudah ada kolom ini dari migration QC:
-                    'qc_status' => 'pending',
-                    'qc_notes' => null,
-                    'notes' => 'WIP cutting di KONTRAKAN (stok belum jahit) - ' . $batch->code,
-                ]);
-            }
-        });
+        // Update status external transfer → BATCHED
+        $externalTransfer->update([
+            'status' => 'BATCHED',
+            'received_at' => now(), // pastikan kolom ini ada di migration external_transfers
+        ]);
 
         return redirect()
-            ->route('vendor-cutting.index')
-            ->with('success', "Hasil cutting untuk {$t->code} berhasil disimpan, stok kain LOT berkurang, dan WIP dibuat di KONTRAKAN.");
+            ->route('production.vendor_cutting.batches.show', $batch->id)
+            ->with('success', 'Batch Cutting ' . $batch->code . ' berhasil dibuat.');
     }
 
     /**
-     * Generate kode batch cutting:
-     * BCH-CUT-YYMMDD-###
+     * Lihat detail batch cutting
      */
-    protected function generateBatchCode(string $date): string
+
+    public function showBatch(ProductionBatch $batch)
     {
-        $d = Carbon::parse($date);
-        $prefix = 'BCH-CUT';
-        $ymd = $d->format('ymd');
+        $batch->load([
+            'materials.lot',
+            'materials.item',
+            'fromWarehouse',
+            'toWarehouse',
+            'externalTransfer',
+            'bundles.lot',
+            'bundles.item',
+        ]);
 
-        $countToday = ProductionBatch::where('process', 'cutting')
-            ->whereDate('date', $d->toDateString())
-            ->count();
+        return view('production.vendor_cutting.show_batch', compact('batch'));
+    }
 
-        $seq = str_pad($countToday + 1, 3, '0', STR_PAD_LEFT);
+    public function editResults(ProductionBatch $batch)
+    {
+        // pastikan memang batch cutting
+        if ($batch->stage !== 'cutting') {
+            abort(404, 'Batch ini bukan batch cutting.');
+        }
 
-        return "{$prefix}-{$ymd}-{$seq}";
+        $batch->load(['materials.lot', 'materials.item', 'bundles']);
+
+        // LOT yang tersedia di batch (untuk dropdown)
+        $lots = $batch->materials->map(function ($m) {
+            return $m->lot;
+        })->unique('id')->values();
+
+        // Item hasil: sementara ambil semua item FG (atau sementara semua item dulu)
+        $items = Item::orderBy('code')->get();
+
+        // Bundles existing (kalau mau edit ulang)
+        $bundles = $batch->bundles()->with(['lot', 'item'])->orderBy('bundle_no')->get();
+
+        return view('production.vendor_cutting.bundles_edit', compact(
+            'batch',
+            'lots',
+            'items',
+            'bundles'
+        ));
+    }
+
+    /**
+     * STORE: simpan hasil cutting per iket (bundle).
+     */
+    public function updateResults(Request $request, ProductionBatch $batch)
+    {
+        if ($batch->stage !== 'cutting') {
+            abort(404, 'Batch ini bukan batch cutting.');
+        }
+
+        $data = $request->validate([
+            'bundles' => ['required', 'array', 'min:1'],
+            'bundles.*.lot_id' => ['required', 'integer', 'exists:lots,id'],
+            'bundles.*.item_id' => ['required', 'integer', 'exists:items,id'],
+            'bundles.*.bundle_code' => ['nullable', 'string', 'max:64'],
+            'bundles.*.bundle_no' => ['nullable', 'integer'],
+            'bundles.*.qty_cut' => ['required', 'numeric', 'min:1'],
+            'bundles.*.unit' => ['required', 'string', 'max:16'],
+            'bundles.*.notes' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $bundlesInput = $data['bundles'];
+
+        // Hapus dulu bundle lama, lalu insert ulang (simple approach)
+        $batch->bundles()->delete();
+
+        $seq = 1;
+
+        foreach ($bundlesInput as $row) {
+            $item = Item::find($row['item_id']);
+
+            $bundleNo = $row['bundle_no'] ?? $seq;
+            $bundleCode = $row['bundle_code'] ?: $this->generateBundleCode($batch, $item, $bundleNo);
+
+            CuttingBundle::create([
+                'production_batch_id' => $batch->id,
+                'lot_id' => $row['lot_id'],
+                'item_id' => $row['item_id'],
+                'item_code' => $item->code,
+                'bundle_code' => $bundleCode,
+                'bundle_no' => $bundleNo,
+                'qty_cut' => $row['qty_cut'],
+                'unit' => $row['unit'],
+                'status' => 'cut',
+                'notes' => $row['notes'] ?? null,
+            ]);
+
+            $seq++;
+        }
+
+        // Update status batch kalau mau: dari 'received' → 'in_progress' atau tetap
+        if ($batch->status === 'received') {
+            $batch->update(['status' => 'in_progress']);
+        }
+
+        return redirect()
+            ->route('production.vendor_cutting.batches.show', $batch->id)
+            ->with('success', 'Hasil cutting per iket berhasil disimpan.');
+    }
+
+    public function sendToQc(ProductionBatch $batch)
+    {
+        if ($batch->stage !== 'cutting') {
+            abort(404, 'Batch ini bukan batch cutting.');
+        }
+
+        if ($batch->bundles()->count() == 0) {
+            return back()->withErrors('Tidak bisa kirim ke QC. Belum ada hasil cutting.');
+        }
+
+        // 1. Update status semua bundle → sent_qc
+        $batch->bundles()->update([
+            'status' => 'sent_qc',
+        ]);
+
+        // 2. Update batch
+        $batch->update([
+            'status' => 'waiting_qc',
+        ]);
+
+        // 3. OPSIONAL: Buat WIP Cutting agar QC & Sewing bisa pakai stok WIP
+        // group item agar qty per item rapi
+        $grouped = $batch->bundles()
+            ->selectRaw('item_id, item_code, SUM(qty_cut) as total_qty')
+            ->groupBy('item_id', 'item_code')
+            ->get();
+
+        foreach ($grouped as $row) {
+
+            // SIMPAN di tabel WIP (jika kamu punya)
+            // Jika belum punya tabel wip_items, aku bisa buatkan juga
+            \DB::table('wip_items')->insert([
+                'production_batch_id' => $batch->id,
+                'item_id' => $row->item_id,
+                'item_code' => $row->item_code,
+                'stage' => 'cutting',
+                'qty' => $row->total_qty,
+                'unit' => 'pcs',
+                'warehouse_id' => 1, // default ke KONTRAKAN - nanti sesuaikan
+                'status' => 'in_qc',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+        }
+
+        return redirect()
+            ->route('production.vendor_cutting.batches.show', $batch->id)
+            ->with('success', 'Batch berhasil dikirim ke QC!');
+    }
+
+    /**
+     * Generator kode batch cutting
+     */
+    protected function generateCuttingBatchCode(): string
+    {
+        $date = now()->format('Ymd');
+
+        $last = ProductionBatch::where('stage', 'cutting')
+            ->whereDate('created_at', now()->toDateString())
+            ->orderByDesc('id')
+            ->first();
+
+        $seq = 1;
+
+        if ($last) {
+            $lastSeq = (int) substr($last->code, -3);
+            $seq = $lastSeq + 1;
+        }
+
+        return 'BATCH-CUT-' . $date . '-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
+    }
+
+    protected function generateBundleCode(ProductionBatch $batch, Item $item, int $bundleNo): string
+    {
+        return sprintf(
+            'BND-%s-%s-%03d',
+            $item->code,
+            $batch->id,
+            $bundleNo
+        );
     }
 }

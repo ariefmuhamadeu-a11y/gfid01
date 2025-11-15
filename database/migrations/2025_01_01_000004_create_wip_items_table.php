@@ -8,50 +8,36 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('wip_items', function (Blueprint $table) {
-            $table->id();
+        Schema::create('wip_items', function (Blueprint $t) {
+            $t->id();
 
-            // Sumber batch produksi (misal dari cutting)
-            $table->foreignId('production_batch_id')
-                ->nullable()
-                ->constrained('production_batches')
-                ->nullOnDelete();
+            $t->unsignedBigInteger('production_batch_id');
+            $t->unsignedBigInteger('item_id');
+            $t->string('item_code', 64);
 
-            // Item WIP (misal: K7BLK, K5BLK, dsb.)
-            $table->foreignId('item_id')
-                ->constrained('items');
-            $table->string('item_code', 50); // simpan juga kode untuk cepat
+            $t->string('stage', 32)->default('cutting'); // cutting, sewing, dsb
+            $t->decimal('qty', 18, 4); // qty OK hasil QC
+            $t->string('unit', 16)->default('pcs');
 
-            // Stok WIP tersimpan di warehouse mana
-            $table->foreignId('warehouse_id')
-                ->constrained('warehouses');
+            $t->unsignedBigInteger('warehouse_id'); // biasanya KONTRAKAN
+            $t->string('status', 32)->default('available'); // in_qc, available, used, dll
 
-            // Dari LOT kain apa (untuk tracing)
-            $table->foreignId('source_lot_id')
-                ->nullable()
-                ->constrained('lots')
-                ->nullOnDelete();
+            $t->text('notes')->nullable();
 
-            // Tahap WIP: hasil cutting, hasil sewing, dll.
-            $table->enum('stage', ['cutting', 'sewing', 'finishing'])
-                ->default('cutting');
+            $t->timestamps();
 
-            // Qty WIP yang masih tersedia
-            $table->decimal('qty', 12, 2)->default(0);
+            $t->index(['production_batch_id', 'stage']);
+            $t->index(['item_code', 'warehouse_id']);
 
-            // Opsional: catatan kecil
-            $table->text('notes')->nullable();
+            $t->foreign('production_batch_id')
+                ->references('id')->on('production_batches')
+                ->cascadeOnDelete();
 
-            $table->timestamps();
+            $t->foreign('item_id')
+                ->references('id')->on('items');
 
-            // Index untuk performa
-            $table->index(['warehouse_id', 'item_id']);
-            $table->index(['stage']);
-            $table->index(['item_code']);
-
-            // Susulan 001
-            $table->string('qc_status', 20)->default('pending')->after('stage');
-            $table->string('qc_notes', 255)->nullable()->after('qc_status');
+            $t->foreign('warehouse_id')
+                ->references('id')->on('warehouses');
         });
     }
 

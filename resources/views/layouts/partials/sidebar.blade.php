@@ -11,97 +11,126 @@
         {{-- ===================== --}}
         <div class="section">Purchasing</div>
 
-        <a class="nav-link {{ request()->routeIs('purchasing.invoices.*') ? 'active' : '' }}"
-            href="{{ route('purchasing.invoices.index') }}">
-            <i class="bi bi-receipt"></i><span>Invoices</span>
-        </a>
+        @if (auth()->user()->hasRole('owner') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('finance'))
+            <a class="nav-link {{ request()->routeIs('purchasing.invoices.*') ? 'active' : '' }}"
+                href="{{ route('purchasing.invoices.index') }}">
+                <i class="bi bi-receipt"></i><span>Invoices</span>
+            </a>
 
-        <a class="nav-link {{ request()->is('suppliers*') ? 'active' : '' }}" href="{{ url('/suppliers') }}">
-            <i class="bi bi-people"></i><span>Suppliers</span>
-        </a>
+            <a class="nav-link {{ request()->is('suppliers*') ? 'active' : '' }}" href="{{ url('/suppliers') }}">
+                <i class="bi bi-people"></i><span>Suppliers</span>
+            </a>
+        @endif
 
         {{-- ===================== --}}
         <div class="section">Produksi</div>
 
-        {{-- External Transfer --}}
-        <a class="nav-link {{ request()->routeIs('external-transfers.*') ? 'active' : '' }}"
-            href="{{ route('external-transfers.index') }}">
-            <i class="bi bi-box-arrow-up-right"></i><span>External Transfer</span>
-        </a>
+        {{-- External Transfer (INVENTORY • admin only sesuai middleware route:admin) --}}
+        @if (auth()->user()->hasRole('admin'))
+            <a class="nav-link {{ request()->routeIs('inventory.external_transfers.*') ? 'active' : '' }}"
+                href="{{ route('inventory.external_transfers.index') }}">
+                <i class="bi bi-box-arrow-up-right"></i><span>External Transfer</span>
+            </a>
+        @endif
 
-        {{-- Vendor Cutting --}}
-        <a class="nav-link {{ request()->routeIs('vendor-cutting.*') ? 'active' : '' }}"
-            href="{{ route('vendor-cutting.index') }}">
-            <i class="bi bi-scissors"></i><span>Vendor Cutting</span>
-        </a>
+        {{-- Vendor Cutting (cutting + admin) --}}
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('cutting'))
+            <a class="nav-link {{ request()->routeIs('production.vendor_cutting.*') ? 'active' : '' }}"
+                href="{{ route('production.vendor_cutting.index') }}">
+                <i class="bi bi-scissors"></i><span>Vendor Cutting</span>
+            </a>
+        @endif
 
-        {{-- QC WIP Cutting (BARU) --}}
-        <a class="nav-link {{ request()->routeIs('wip_cutting_qc.*') ? 'active' : '' }}"
-            href="{{ route('wip_cutting_qc.index') }}">
-            <i class="bi bi-clipboard-check"></i><span>QC Cutting</span>
-        </a>
+        {{-- QC WIP Cutting (qc + admin) --}}
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('qc'))
+            <a class="nav-link {{ request()->routeIs('production.wip_cutting_qc.*') ? 'active' : '' }}"
+                href="{{ route('production.wip_cutting_qc.index') }}">
+                <i class="bi bi-clipboard-check"></i><span>QC Cutting</span>
+            </a>
+        @endif
 
-        {{-- Sewing Internal --}}
-        <a class="nav-link {{ request()->routeIs('sewing.*') ? 'active' : '' }}" href="{{ route('sewing.index') }}">
-            <i class="bi bi-tools"></i><span>Sewing</span>
-        </a>
+        {{-- Sewing (sewing + admin) --}}
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('sewing') || auth()->user()->hasRole('owner'))
+            <a class="nav-link {{ request()->routeIs('sewing.*') ? 'active' : '' }}"
+                href="{{ route('sewing.index') }}">
+                <i class="bi bi-tools"></i><span>Sewing</span>
+            </a>
+        @endif
 
-        {{-- Finishing --}}
-        <a class="nav-link {{ request()->routeIs('finishing.*') ? 'active' : '' }}"
-            href="{{ route('finishing.index') }}">
-            <i class="bi bi-check2-square"></i><span>Finishing</span>
-        </a>
+        {{-- Finishing (finishing + admin + owner) --}}
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('owner') || auth()->user()->hasRole('finishing'))
+            <a class="nav-link {{ request()->routeIs('finishing.*') ? 'active' : '' }}"
+                href="{{ route('finishing.index') }}">
+                <i class="bi bi-check2-square"></i><span>Finishing</span>
+            </a>
+        @endif
+
 
         {{-- ===================== --}}
         <div class="section">Inventory</div>
 
-        <a class="nav-link {{ request()->is('inventory/mutations*') ? 'active' : '' }}"
-            href="{{ url('/inventory/mutations') }}">
-            <i class="bi bi-arrow-left-right"></i><span>Mutasi</span>
-        </a>
+        {{-- Middleware route:admin → cuma admin yang bisa akses --}}
+        @if (auth()->user()->hasRole('admin'))
+            {{-- Mutasi --}}
+            <a class="nav-link {{ request()->is('inventory/mutations*') ? 'active' : '' }}"
+                href="{{ url('/inventory/mutations') }}">
+                <i class="bi bi-arrow-left-right"></i><span>Mutasi</span>
+            </a>
 
-        <a class="nav-link {{ request()->is('inventory/stocks*') ? 'active' : '' }}"
-            href="{{ url('/inventory/stocks') }}">
-            <i class="bi bi-box-seam"></i><span>Stok Barang</span>
-        </a>
+            {{-- Stok --}}
+            <a class="nav-link {{ request()->is('inventory/stocks*') ? 'active' : '' }}"
+                href="{{ url('/inventory/stocks') }}">
+                <i class="bi bi-box-seam"></i><span>Stok Barang</span>
+            </a>
+        @endif
+
 
         {{-- ===================== --}}
         <div class="section">Master Data</div>
 
-        <a class="nav-link {{ request()->routeIs('master.warehouses.*') ? 'active' : '' }}"
-            href="{{ route('master.warehouses.index') }}">
-            <i class="bi bi-buildings"></i><span>Gudang</span>
-        </a>
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('owner'))
+            <a class="nav-link {{ request()->routeIs('master.warehouses.*') ? 'active' : '' }}"
+                href="{{ route('master.warehouses.index') }}">
+                <i class="bi bi-buildings"></i><span>Gudang</span>
+            </a>
+        @endif
+
 
         {{-- ===================== --}}
         <div class="section">Payroll</div>
 
-        <a class="nav-link {{ request()->is('payroll/rates*') ? 'active' : '' }}" href="{{ url('/payroll/rates') }}">
-            <i class="bi bi-cash-coin"></i><span>Tarif Per Pcs</span>
-        </a>
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('owner') || auth()->user()->hasRole('finance'))
+            <a class="nav-link {{ request()->is('payroll/rates*') ? 'active' : '' }}"
+                href="{{ url('/payroll/rates') }}">
+                <i class="bi bi-cash-coin"></i><span>Tarif Per Pcs</span>
+            </a>
 
-        <a class="nav-link {{ request()->is('payroll/entries*') ? 'active' : '' }}"
-            href="{{ url('/payroll/entries') }}">
-            <i class="bi bi-person-lines-fill"></i><span>Data Gaji</span>
-        </a>
+            <a class="nav-link {{ request()->is('payroll/entries*') ? 'active' : '' }}"
+                href="{{ url('/payroll/entries') }}">
+                <i class="bi bi-person-lines-fill"></i><span>Data Gaji</span>
+            </a>
 
-        <a class="nav-link {{ request()->routeIs('payroll.runs.*') ? 'active' : '' }}"
-            href="{{ route('payroll.runs.index') }}">
-            <i class="bi bi-calculator"></i><span>Payroll per PCS</span>
-        </a>
+            <a class="nav-link {{ request()->routeIs('payroll.runs.*') ? 'active' : '' }}"
+                href="{{ route('payroll.runs.index') }}">
+                <i class="bi bi-calculator"></i><span>Payroll per PCS</span>
+            </a>
+        @endif
+
 
         {{-- ===================== --}}
         <div class="section">Accounting</div>
 
-        <a class="nav-link {{ request()->routeIs('accounting.journals.*') ? 'active' : '' }}"
-            href="{{ route('accounting.journals.index') }}">
-            <i class="bi bi-journal-text"></i><span>Jurnal</span>
-        </a>
+        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('owner') || auth()->user()->hasRole('finance'))
+            <a class="nav-link {{ request()->routeIs('accounting.journals.*') ? 'active' : '' }}"
+                href="{{ route('accounting.journals.index') }}">
+                <i class="bi bi-journal-text"></i><span>Jurnal</span>
+            </a>
 
-        <a class="nav-link {{ request()->routeIs('accounting.ledger') ? 'active' : '' }}"
-            href="{{ route('accounting.ledger') }}">
-            <i class="bi bi-columns-gap"></i><span>Ledger</span>
-        </a>
+            <a class="nav-link {{ request()->routeIs('accounting.ledger') ? 'active' : '' }}"
+                href="{{ route('accounting.ledger') }}">
+                <i class="bi bi-columns-gap"></i><span>Ledger</span>
+            </a>
+        @endif
 
     </nav>
 </aside>

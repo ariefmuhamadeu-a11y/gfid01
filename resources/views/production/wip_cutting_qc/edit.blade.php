@@ -1,249 +1,189 @@
 @extends('layouts.app')
 
-@section('title', 'QC WIP Cutting • ' . $wip->item_code)
+@section('title', 'QC Cutting • ' . $batch->code)
 
 @push('head')
     <style>
-        .qc-page .card {
+        .page-wrap {
+            max-width: 1080px;
+            margin-inline: auto;
+        }
+
+        .card {
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: 14px;
         }
 
-        .qc-page .mono {
+        .mono {
             font-variant-numeric: tabular-nums;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono";
         }
 
-        .small-label {
-            font-size: .75rem;
-            text-transform: uppercase;
-            letter-spacing: .04em;
+        .help {
             color: var(--muted);
+            font-size: .85rem;
+        }
+
+        th.sticky {
+            position: sticky;
+            top: 0;
+            background: var(--card);
+            z-index: 1;
         }
     </style>
 @endpush
 
 @section('content')
-    <div class="qc-page container-fluid">
-        <div class="mb-3 d-flex justify-content-between align-items-center">
-            <a href="{{ route('wip_cutting_qc.index') }}" class="btn btn-sm btn-outline-secondary">
-                &larr; Kembali
+    <div class="page-wrap py-3">
+
+        <div class="d-flex align-items-center mb-3">
+            <a href="{{ route('production.wip_cutting_qc.index') }}" class="btn btn-sm btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i>
             </a>
-            <div class="text-muted small">
-                WIP ID: {{ $wip->id }}
-            </div>
-        </div>
-
-        <div class="row g-3">
-            {{-- LEFT: Info WIP --}}
-            <div class="col-12 col-lg-4">
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <div class="small-label mb-2">Info WIP Cutting</div>
-
-                        <div class="mb-2">
-                            <div class="small-label">Item</div>
-                            <div class="fw-semibold">
-                                {{ $wip->item_code }}
-                            </div>
-                            <div class="text-muted small">
-                                {{ $wip->item?->name ?? '-' }}
-                            </div>
-                        </div>
-
-                        <div class="mb-2">
-                            <div class="small-label">Qty WIP Saat ini</div>
-                            <div class="mono fw-semibold">
-                                {{ number_format($wip->qty, 2) }} pcs
-                            </div>
-                        </div>
-
-                        <div class="mb-2">
-                            <div class="small-label">Gudang</div>
-                            <div class="fw-semibold">
-                                {{ $wip->warehouse?->code ?? '-' }}
-                            </div>
-                            <div class="text-muted small">
-                                {{ $wip->warehouse?->name ?? '' }}
-                            </div>
-                        </div>
-
-                        <div class="mb-2">
-                            <div class="small-label">Batch Cutting</div>
-                            @if ($wip->productionBatch)
-                                <div class="mono fw-semibold">
-                                    {{ $wip->productionBatch->code }}
-                                </div>
-                                <div class="text-muted small">
-                                    {{ optional($wip->productionBatch->date)->format('d M Y') }}
-                                </div>
-                            @else
-                                <span class="text-muted small">—</span>
-                            @endif
-                        </div>
-
-                        <div class="mb-2">
-                            <div class="small-label">QC Status</div>
-                            <span class="badge bg-warning text-dark">
-                                {{ strtoupper($wip->qc_status ?? 'pending') }}
-                            </span>
-                            @if ($wip->qc_notes)
-                                <div class="text-muted small mt-1">
-                                    Catatan terakhir: {{ $wip->qc_notes }}
-                                </div>
-                            @endif
-                        </div>
-
-                        @if ($wip->components->count())
-                            <div class="mt-3">
-                                <div class="small-label mb-1">Komponen yang sudah terpasang</div>
-                                <ul class="small mb-0">
-                                    @foreach ($wip->components as $comp)
-                                        <li>
-                                            {{ $comp->type ?? $comp->item_code }}
-                                            &times; {{ number_format($comp->qty, 2) }} {{ $comp->unit }}
-                                            (LOT: {{ $comp->lot?->code ?? $comp->lot_id }})
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            </div>
-                        @endif
-                    </div>
+            <div>
+                <h1 class="h4 mb-0">QC Cutting – {{ $batch->code }}</h1>
+                <div class="help">
+                    Stage: {{ $batch->stage }} • Status: {{ $batch->status }}
                 </div>
             </div>
+        </div>
 
-            {{-- RIGHT: Form QC --}}
-            <div class="col-12 col-lg-8">
-                <form action="{{ route('wip_cutting_qc.update', $wip->id) }}" method="post">
-                    @csrf
-                    @method('PUT')
+        @if ($errors->any())
+            <div class="alert alert-danger small">
+                <strong>Terjadi kesalahan:</strong>
+                <ul class="mb-0 mt-1">
+                    @foreach ($errors->all() as $err)
+                        <li>{{ $err }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h2 class="h5 mb-3">QC & Kitting WIP Cutting</h2>
-
-                            @if ($errors->any())
-                                <div class="alert alert-danger small">
-                                    <ul class="mb-0">
-                                        @foreach ($errors->all() as $err)
-                                            <li>{{ $err }}</li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                            @endif
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-6 col-md-4">
-                                    <label class="form-label small-label">Qty OK (pcs)</label>
-                                    <input type="number" name="qty_ok" value="{{ old('qty_ok', (int) $wip->qty) }}"
-                                        class="form-control mono" min="0" step="1">
-                                    <div class="text-muted small">
-                                        Maks: {{ (int) $wip->qty }} pcs
-                                    </div>
-                                </div>
-                                <div class="col-6 col-md-4">
-                                    <label class="form-label small-label">Qty Reject (opsional)</label>
-                                    <input type="number" name="qty_reject" value="{{ old('qty_reject') }}"
-                                        class="form-control mono" min="0" step="1">
-                                </div>
-                                <div class="col-12 col-md-4">
-                                    <label class="form-label small-label">Status QC</label>
-                                    <select name="qc_status" class="form-select form-select-sm">
-                                        <option value="approved"
-                                            {{ old('qc_status', 'approved') === 'approved' ? 'selected' : '' }}>Approved
-                                        </option>
-                                        <option value="rejected" {{ old('qc_status') === 'rejected' ? 'selected' : '' }}>
-                                            Rejected</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label small-label">Catatan QC</label>
-                                <textarea name="qc_notes" rows="2" class="form-control" placeholder="Catatan hasil QC (opsional)">{{ old('qc_notes', $wip->qc_notes) }}</textarea>
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- Komponen / Bahan Pendukung --}}
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="small-label">Bahan Pendukung (rib, karet, dll.)</div>
-                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                    onclick="qcAddComponentRow()">
-                                    + Tambah Komponen
-                                </button>
-                            </div>
-
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0" id="components-table">
-                                    <thead>
-                                        <tr>
-                                            <th style="width: 25%">LOT ID</th>
-                                            <th style="width: 25%">Qty</th>
-                                            <th style="width: 20%">Unit</th>
-                                            <th style="width: 20%">Tipe (rib/karet)</th>
-                                            <th style="width: 10%"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {{-- baris dinamis via JS --}}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div class="text-muted small mt-2">
-                                Catatan: LOT rib/karet harus sudah dibuat & punya stok di gudang ini.
-                                Sistem akan otomatis mengurangi stok per LOT sesuai qty di atas.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            Simpan QC & Kitting
-                        </button>
-                    </div>
-                </form>
+        {{-- Info singkat bahan --}}
+        <div class="card mb-3">
+            <div class="p-3 border-bottom">
+                <div class="fw-semibold">Bahan (LOT) di Batch</div>
+            </div>
+            <div class="table-responsive" style="max-height: 220px;">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th class="sticky">LOT</th>
+                            <th class="sticky">Item</th>
+                            <th class="sticky text-end">Qty Planned</th>
+                            <th class="sticky">Unit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($batch->materials as $m)
+                            <tr>
+                                <td class="mono">{{ $m->lot->code ?? '-' }}</td>
+                                <td>
+                                    <div class="fw-semibold">{{ $m->item->name ?? '-' }}</div>
+                                    <div class="help mono">{{ $m->item_code }}</div>
+                                </td>
+                                <td class="text-end mono">{{ number_format($m->qty_planned, 2) }}</td>
+                                <td>{{ $m->unit }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="4" class="text-center text-muted small py-3">
+                                    Tidak ada data bahan.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
+
+        <form method="POST" action="{{ route('production.wip_cutting_qc.update', $batch->id) }}">
+            @csrf
+
+            <div class="card mb-3">
+                <div class="p-3 border-bottom d-flex align-items-center">
+                    <div>
+                        <div class="fw-semibold">QC per Iket / Bundle</div>
+                        <div class="help">Pilih OK / Reject untuk setiap iket.</div>
+                    </div>
+                </div>
+
+                <div class="table-responsive" style="max-height: 420px;">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th class="sticky">Bundle</th>
+                                <th class="sticky">LOT Sumber</th>
+                                <th class="sticky">Item</th>
+                                <th class="sticky text-end">Qty</th>
+                                <th class="sticky">Unit</th>
+                                <th class="sticky text-center">QC</th>
+                                <th class="sticky">Catatan QC</th>
+                            </tr>
+                        </thead>
+
+                        {{-- UPDATE QC  --}}
+                        <tbody>
+                            @forelse ($batch->bundles as $b)
+                                @php
+                                    $index = $loop->index;
+                                    $oldReject = old("bundles.$index.qty_reject", $b->qty_reject ?? 0);
+                                    $qtyCut = (int) $b->qty_cut;
+                                    $previewOk = max($qtyCut - (int) $oldReject, 0);
+                                @endphp
+                                <tr>
+                                    <td>
+                                        <div class="mono fw-semibold">{{ $b->bundle_code }}</div>
+                                        <div class="help">No: {{ $b->bundle_no }}</div>
+                                        <input type="hidden" name="bundles[{{ $index }}][id]"
+                                            value="{{ $b->id }}">
+                                    </td>
+                                    <td class="mono">{{ $b->lot->code ?? '-' }}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ $b->item->name ?? '-' }}</div>
+                                        <div class="help mono">{{ $b->item_code }}</div>
+                                    </td>
+                                    <td class="text-end mono">{{ number_format($b->qty_cut, 0) }}</td>
+                                    <td>{{ $b->unit }}</td>
+
+                                    {{-- input defect --}}
+                                    <td class="text-center">
+                                        <div class="small text-muted mb-1">Defect / Reject (pcs)</div>
+                                        <input type="number" name="bundles[{{ $index }}][qty_reject]"
+                                            class="form-control form-control-sm text-end mono" min="0"
+                                            max="{{ $qtyCut }}" value="{{ $oldReject }}">
+                                        <div class="help">
+                                            OK ≈ {{ $previewOk }} pcs dari {{ $qtyCut }}
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <input type="text" name="bundles[{{ $index }}][qc_notes]"
+                                            value="{{ old("bundles.$index.qc_notes", $b->notes) }}"
+                                            class="form-control form-control-sm">
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted small py-3">
+                                        Tidak ada data iket. Input dulu di modul Cutting.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+
+
+                    </table>
+                </div>
+
+                <div class="p-3 border-top text-end">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check2-circle"></i>
+                        Simpan Hasil QC
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
-
-    {{-- JS super simple untuk nambah/hapus baris komponen --}}
-    @push('scripts')
-        <script>
-            function qcAddComponentRow() {
-                const tbody = document.querySelector('#components-table tbody');
-                const idx = tbody.children.length;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-            <td>
-                <input type="number" name="components[${idx}][lot_id]" class="form-control form-control-sm mono"
-                       placeholder="ID LOT" min="1">
-            </td>
-            <td>
-                <input type="number" name="components[${idx}][qty]" class="form-control form-control-sm mono"
-                       placeholder="Qty" step="0.0001" min="0">
-            </td>
-            <td>
-                <input type="text" name="components[${idx}][unit]" class="form-control form-control-sm mono"
-                       placeholder="pcs/m/kg">
-            </td>
-            <td>
-                <input type="text" name="components[${idx}][type]" class="form-control form-control-sm"
-                       placeholder="rib/karet">
-            </td>
-            <td class="text-end">
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">
-                    &times;
-                </button>
-            </td>
-        `;
-                tbody.appendChild(tr);
-            }
-        </script>
-    @endpush
 @endsection

@@ -15,6 +15,7 @@ class EmployeeSeeder extends Seeder
             ['code' => 'MYD', 'name' => 'Mang Yadi', 'role' => 'sewing', 'active' => 1],
             ['code' => 'BBI', 'name' => 'Bi Rini', 'role' => 'sewing', 'active' => 1],
             ['code' => 'RDN', 'name' => 'Jang Ridwan', 'role' => 'sewing', 'active' => 1],
+            ['code' => 'ARF', 'name' => 'Zuaress', 'role' => 'owner', 'active' => 1],
         ];
 
         foreach ($rows as $r) {

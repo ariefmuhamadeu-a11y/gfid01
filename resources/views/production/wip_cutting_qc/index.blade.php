@@ -1,118 +1,101 @@
 @extends('layouts.app')
 
-@section('title', 'Produksi • QC WIP Cutting')
+@section('title', 'QC Cutting • Daftar Batch')
 
 @push('head')
     <style>
-        .qc-page .card {
+        .page-wrap {
+            max-width: 1080px;
+            margin-inline: auto;
+        }
+
+        .card {
             background: var(--card);
             border: 1px solid var(--line);
             border-radius: 14px;
         }
 
-        .qc-page .mono {
+        .mono {
             font-variant-numeric: tabular-nums;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono";
         }
 
-        .small-label {
-            font-size: .75rem;
-            text-transform: uppercase;
-            letter-spacing: .04em;
+        .help {
             color: var(--muted);
+            font-size: .85rem;
+        }
+
+        th.sticky {
+            position: sticky;
+            top: 0;
+            background: var(--card);
+            z-index: 1;
         }
     </style>
 @endpush
 
 @section('content')
-    <div class="qc-page container-fluid">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <h1 class="h4 mb-0">QC WIP Cutting</h1>
-                <div class="text-muted small">
-                    WIP hasil cutting yang menunggu QC & pelengkapan bahan (rib, karet, dll).
-                </div>
-            </div>
+    <div class="page-wrap py-3">
 
-            <form method="get" class="d-flex gap-2">
-                <input type="text" name="item_code" value="{{ request('item_code') }}"
-                    class="form-control form-control-sm mono" placeholder="Cari kode item...">
-                <button class="btn btn-sm btn-outline-secondary">Filter</button>
-            </form>
+        <div class="d-flex align-items-center mb-3">
+            <div>
+                <h1 class="h4 mb-0">QC Cutting</h1>
+                <div class="help">Batch cutting yang menunggu proses QC.</div>
+            </div>
         </div>
+
+        @if (session('success'))
+            <div class="alert alert-success small">
+                {{ session('success') }}
+            </div>
+        @endif
 
         <div class="card">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
+            <div class="table-responsive" style="max-height: 460px;">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th class="sticky">Tanggal</th>
+                            <th class="sticky">Batch</th>
+                            <th class="sticky">Operator</th>
+                            <th class="sticky">External Transfer</th>
+                            <th class="sticky text-center"># Bundles</th>
+                            <th class="sticky text-end">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($batches as $batch)
                             <tr>
-                                <th>Kode Item</th>
-                                <th>Nama Item</th>
-                                <th class="text-end">Qty WIP</th>
-                                <th>Gudang</th>
-                                <th>Batch Cutting</th>
-                                <th>QC Status</th>
-                                <th class="text-end">Aksi</th>
+                                <td>{{ $batch->date_received?->format('d M Y') ?? '-' }}</td>
+                                <td class="mono">{{ $batch->code }}</td>
+                                <td>{{ $batch->operator_code }}</td>
+                                <td class="mono">{{ $batch->externalTransfer->code ?? '-' }}</td>
+                                <td class="text-center mono">{{ $batch->bundles_count }}</td>
+                                <td class="text-end">
+                                    <a href="{{ route('production.wip_cutting_qc.edit', $batch->id) }}"
+                                        class="btn btn-sm btn-primary">
+                                        <i class="bi bi-check2-square"></i>
+                                        QC
+                                    </a>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($wips as $wip)
-                                <tr>
-                                    <td class="mono">{{ $wip->item_code }}</td>
-                                    <td>
-                                        <div class="fw-semibold">{{ $wip->item?->name ?? '-' }}</div>
-                                    </td>
-                                    <td class="text-end mono">
-                                        {{ number_format($wip->qty, 2) }} pcs
-                                    </td>
-                                    <td>
-                                        <div class="fw-semibold">
-                                            {{ $wip->warehouse?->code ?? '-' }}
-                                        </div>
-                                        <div class="text-muted small">
-                                            {{ $wip->warehouse?->name ?? '' }}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        @if ($wip->productionBatch)
-                                            <div class="mono">
-                                                {{ $wip->productionBatch->code }}
-                                            </div>
-                                            <div class="text-muted small">
-                                                {{ optional($wip->productionBatch->date)->format('d M Y') }}
-                                            </div>
-                                        @else
-                                            <span class="text-muted small">—</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-warning text-dark">
-                                            {{ strtoupper($wip->qc_status ?? 'pending') }}
-                                        </span>
-                                    </td>
-                                    <td class="text-end">
-                                        <a href="{{ route('wip_cutting_qc.edit', $wip->id) }}"
-                                            class="btn btn-sm btn-outline-primary">
-                                            QC & Kitting
-                                        </a>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">
-                                        Tidak ada WIP Cutting yang menunggu QC.
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="p-2">
-                    {{ $wips->links() }}
-                </div>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="text-center text-muted small py-3">
+                                    Tidak ada batch yang menunggu QC.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
+
+            @if ($batches->hasPages())
+                <div class="p-2 border-top">
+                    {{ $batches->links() }}
+                </div>
+            @endif
         </div>
+
     </div>
 @endsection

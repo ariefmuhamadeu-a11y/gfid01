@@ -2,8 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\CuttingBundle;
+use App\Models\ExternalTransfer;
+use App\Models\ProductionBatchMaterial;
+use App\Models\Warehouse;
+use App\Models\WipItem;
+use Illuminate\Database\Eloquent\Factories\HasFactory; // nanti kalau sudah ada
 use Illuminate\Database\Eloquent\Model;
+
+// nanti kalau sudah ada
 
 class ProductionBatch extends Model
 {
@@ -13,137 +20,103 @@ class ProductionBatch extends Model
 
     protected $fillable = [
         'code',
-        'date',
-        'process',
+        'stage',
         'status',
-        'external_transfer_id',
-        'lot_id',
+        'operator_code',
         'from_warehouse_id',
         'to_warehouse_id',
-        'operator_code',
-        'input_qty',
-        'input_uom',
-        'output_total_pcs',
-        'output_items_json',
-        'waste_qty',
-        'remain_qty',
+        'external_transfer_id',
+        'date_received',
+        'started_at',
+        'finished_at',
+        'total_output_qty',
+        'total_reject_qty',
         'notes',
-        'created_by',
-        'updated_by',
     ];
 
     protected $casts = [
-        'date' => 'date',
-        'input_qty' => 'float',
-        'output_total_pcs' => 'integer',
-        'waste_qty' => 'float',
-        'remain_qty' => 'float',
-        'output_items_json' => 'array',
+        'date_received' => 'date',
+        'started_at' => 'datetime',
+        'finished_at' => 'datetime',
+        'total_output_qty' => 'decimal:4',
+        'total_reject_qty' => 'decimal:4',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | RELATIONSHIPS
-    |--------------------------------------------------------------------------
+    /* =========================
+     * RELATIONS
+     * ========================= */
+
+    /**
+     * Gudang asal (misal: KONTRAKAN)
      */
-
-    public function externalTransfer()
-    {
-        return $this->belongsTo(ExternalTransfer::class, 'external_transfer_id');
-    }
-
-    public function lot()
-    {
-        // Untuk cutting, ini LOT kain utama
-        return $this->belongsTo(Lot::class, 'lot_id');
-    }
-
     public function fromWarehouse()
     {
         return $this->belongsTo(Warehouse::class, 'from_warehouse_id');
     }
 
+    /**
+     * Gudang tujuan (misal: CUT-EXT-MRF)
+     */
     public function toWarehouse()
     {
         return $this->belongsTo(Warehouse::class, 'to_warehouse_id');
     }
 
-    public function createdByUser()
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function updatedByUser()
-    {
-        return $this->belongsTo(User::class, 'updated_by');
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | ACCESSORS / HELPERS
-    |--------------------------------------------------------------------------
+    /**
+     * Dokumen external transfer sumber batch ini
      */
-
-    public function isCutting(): bool
+    public function externalTransfer()
     {
-        return $this->process === 'cutting';
+        return $this->belongsTo(ExternalTransfer::class, 'external_transfer_id');
     }
 
-    public function isSewing(): bool
-    {
-        return $this->process === 'sewing';
-    }
-
-    public function isFinishing(): bool
-    {
-        return $this->process === 'finishing';
-    }
-
-    public function isDone(): bool
-    {
-        return $this->status === 'done';
-    }
-
-    public function getOutputItemsListAttribute()
-    {
-        // Helper kecil untuk tampilan: kumpulan item hasil cutting
-        $items = $this->output_items_json ?? [];
-        // contoh return: "K7BLK: 300 pcs, K5BLK: 150 pcs"
-        $parts = [];
-        foreach ($items as $code => $qty) {
-            $parts[] = "{$code}: {$qty} pcs";
-        }
-        return implode(', ', $parts);
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | SCOPES
-    |--------------------------------------------------------------------------
+    /**
+     * (Optional) Relasi ke cutting_bundles nanti
+     * 1 batch memiliki banyak iket/bundle hasil cutting
      */
-
-    public function scopeCutting($q)
+    public function cuttingBundles()
     {
-        return $q->where('process', 'cutting');
+        return $this->hasMany(CuttingBundle::class, 'production_batch_id');
     }
 
-    public function scopeSewing($q)
+    /**
+     * (Optional) Relasi ke WIP Items (hasil akhir cutting yang siap ke QC/sewing)
+     */
+    public function wipItems()
     {
-        return $q->where('process', 'sewing');
+        return $this->hasMany(WipItem::class, 'production_batch_id');
     }
 
-    public function scopeFinishing($q)
+    /* =========================
+     * SCOPES BANTUAN
+     * ========================= */
+
+    /**
+     * Scope hanya batch cutting
+     */
+    public function scopeCutting($query)
     {
-        return $q->where('process', 'finishing');
+        return $query->where('stage', 'cutting');
     }
 
-    public function scopeForProcess($q, string $process)
+    /**
+     * Scope filter status
+     */
+    public function scopeStatus($query, string $status)
     {
-        return $q->where('process', $process);
+        return $query->where('status', $status);
     }
 
-    public function scopeStatus($q, string $status)
+    // app/Models/ProductionBatch.php
+
+    public function bundles()
     {
-        return $q->where('status', $status);
+        return $this->hasMany(CuttingBundle::class, 'production_batch_id');
     }
+
+    public function materials()
+    {
+        return $this->hasMany(ProductionBatchMaterial::class);
+    }
+
 }

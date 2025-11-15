@@ -93,4 +93,10 @@ class Employee extends Model
     {
         return "{$this->code} — {$this->name}";
     }
+
+    public function cuttingWarehouse()
+    {
+        return $this->belongsTo(Warehouse::class, 'cutting_warehouse_id');
+    }
+
 }

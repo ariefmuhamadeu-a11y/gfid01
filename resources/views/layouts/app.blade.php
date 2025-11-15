@@ -32,7 +32,11 @@
 
 <body class="with-topbar">
     @include('layouts.partials.topbar')
-    @include('layouts.partials.sidebar')
+
+    @if (auth()->check())
+        @include('layouts.partials.sidebar')
+    @endif
+
     @include('layouts.partials.offcanvas')
 
     <main class="content-wrap">
