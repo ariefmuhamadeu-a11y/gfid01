@@ -1,57 +1,28 @@
 <?php
 
 use App\Http\Controllers\Production\FinishingController;
-use App\Http\Controllers\Production\SewingController;
 use App\Http\Controllers\Production\VendorCuttingController;
 use App\Http\Controllers\Production\WipCuttingQcController;
 use App\Http\Controllers\Production\WipSewingController;
 use Illuminate\Support\Facades\Route;
 
-// SEWING
-Route::prefix('production/sewing')
-    ->name('sewing.')
-    ->group(function () {
-        Route::get('/', [SewingController::class, 'index'])->name('index');
-
-        Route::get('{wipItem}/create', [SewingController::class, 'create'])->name('create');
-        Route::post('{wipItem}', [SewingController::class, 'store'])->name('store');
-    });
-
-// FINISHING
-Route::prefix('production/finishing')
-    ->name('finishing.')
-    ->group(function () {
-        Route::get('/', [FinishingController::class, 'index'])->name('index');
-        Route::get('{wipItem}/create', [FinishingController::class, 'create'])->name('create');
-        Route::post('{wipItem}', [FinishingController::class, 'store'])->name('store');
-        Route::get('{wipItem}', [FinishingController::class, 'show'])->name('show');
-    });
-
 Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
-
-    Route::prefix('production')->name('production.')->group(function () {
-
-        Route::prefix('vendor-cutting')->name('vendor_cutting.')->group(function () {
-
-            Route::get('/', [VendorCuttingController::class, 'index'])->name('index');
-
-            Route::get('/receive/{externalTransfer}', [VendorCuttingController::class, 'receiveForm'])
-                ->name('receive.form');
-
-            Route::post('/receive/{externalTransfer}', [VendorCuttingController::class, 'receiveStore'])
-                ->name('receive.store');
-
-            Route::get('/batches/{batch}', [VendorCuttingController::class, 'showBatch'])
-                ->name('batches.show');
-        });
-
-    });
 
     Route::prefix('production')->name('production.')->group(function () {
         Route::prefix('vendor-cutting')->name('vendor_cutting.')
             ->group(function () {
 
                 // ... route yang sudah ada (index, receive, showBatch) ...
+                Route::get('/', [VendorCuttingController::class, 'index'])->name('index');
+
+                Route::get('/receive/{externalTransfer}', [VendorCuttingController::class, 'receiveForm'])
+                    ->name('receive.form');
+
+                Route::post('/receive/{externalTransfer}', [VendorCuttingController::class, 'receiveStore'])
+                    ->name('receive.store');
+
+                Route::get('/batches/{batch}', [VendorCuttingController::class, 'showBatch'])
+                    ->name('batches.show');
 
                 // STEP 2: input hasil cutting per iket
                 Route::get('/batches/{batch}/results', [VendorCuttingController::class, 'editResults'])
@@ -114,6 +85,34 @@ Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
                 Route::post('/{sewingBatch}/complete', [WipSewingController::class, 'complete'])
                     ->name('complete');
             });
+
+        // ==========================
+        // FINISHING
+        // ==========================
+
+        Route::prefix('finishing')->name('finishing.')->group(function () {
+
+            Route::get('/', [FinishingController::class, 'index'])
+                ->name('index');
+
+            Route::get('/create-from-sewing/{sewingBatch}', [FinishingController::class, 'createFromSewing'])
+                ->name('create_from_sewing');
+
+            Route::post('/create-from-sewing/{sewingBatch}', [FinishingController::class, 'storeFromSewing'])
+                ->name('store_from_sewing');
+
+            Route::get('/{finishingBatch}/edit', [FinishingController::class, 'edit'])
+                ->name('edit');
+
+            Route::put('/{finishingBatch}', [FinishingController::class, 'update'])
+                ->name('update');
+
+            Route::post('/{finishingBatch}/complete', [FinishingController::class, 'complete'])
+                ->name('complete');
+
+            Route::get('/{finishingBatch}', [FinishingController::class, 'show'])
+                ->name('show');
+        });
 
     });
 

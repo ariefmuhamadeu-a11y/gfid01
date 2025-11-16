@@ -32,4 +32,10 @@ class SewingBatch extends Model
     {
         return $this->hasMany(SewingBundleLine::class);
     }
+
+    public function finishingBatch()
+    {
+        return $this->hasOne(FinishingBatch::class);
+    }
+
 }

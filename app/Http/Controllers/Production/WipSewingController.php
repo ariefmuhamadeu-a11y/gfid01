@@ -17,8 +17,8 @@ class WipSewingController extends Controller
      */
     public function index()
     {
-        // asumsi: kolom qc_status di production_batches: waiting_qc, in_progress, qc_done
-        $batches = ProductionBatch::where('qc_status', 'qc_done')
+        // asumsi: kolom status di production_batches: waiting_qc, in_progress, qc_done
+        $batches = ProductionBatch::where('status', 'qc_done')
             ->withCount('sewingBatches')
             ->orderByDesc('created_at')
             ->get();
@@ -35,7 +35,7 @@ class WipSewingController extends Controller
     public function createFromBatch(ProductionBatch $batch)
     {
         // Pastikan batch sudah QC done
-        if ($batch->qc_status !== 'qc_done') {
+        if ($batch->status !== 'qc_done') {
             return redirect()
                 ->route('production.wip_sewing.index')
                 ->with('error', 'Batch ini belum selesai QC.');
@@ -78,7 +78,7 @@ class WipSewingController extends Controller
         ]);
 
         // Pastikan batch sudah QC done
-        if ($batch->qc_status !== 'qc_done') {
+        if ($batch->status !== 'qc_done') {
             return redirect()
                 ->route('production.wip_sewing.index')
                 ->with('error', 'Batch ini belum selesai QC.');
