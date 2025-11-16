@@ -3,15 +3,19 @@
 namespace App\Http\Controllers\Inventory;
 
 use App\Http\Controllers\Controller;
+use App\Models\CuttingBundle;
 use App\Models\Employee;
 use App\Models\ExternalTransfer;
+use App\Models\ExternalTransferBundleLine;
 use App\Models\ExternalTransferLine;
 use App\Models\Lot;
 use App\Models\Warehouse;
 use App\Services\InventoryService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ExternalTransferController extends Controller
 {
@@ -27,13 +31,13 @@ class ExternalTransferController extends Controller
 
     public function create(Request $request)
     {
-        // Semua gudang (buat dropdown "Dari Gudang")
         $warehouses = Warehouse::orderBy('name')->get();
 
-        // Default proses = cutting (kalau tidak dipilih)
-        $defaultProcess = $request->get('process', 'cutting');
+        $transferType = $request->get('transfer_type', $request->old('transfer_type', 'material'));
+        $defaultProcess = $transferType === 'sewing_bundle'
+            ? 'sewing'
+            : $request->get('process', 'cutting');
 
-        // Default "Dari Gudang" = KONTRAKAN (kalau ada), bisa dioverride via query param
         $defaultFromWarehouse = $warehouses->firstWhere('code', 'KONTRAKAN');
         $fromWarehouseId = $request->get('from_warehouse_id');
 
@@ -43,44 +47,17 @@ class ExternalTransferController extends Controller
 
         $defaultFromWarehouseId = $fromWarehouseId;
 
-        // Semua karyawan (nanti di Blade difilter by role = process)
         $employees = Employee::orderBy('name')->get();
-
-        // Operator yang dipilih (dari query / old form)
         $operatorCode = $request->get('operator_code', $request->old('operator_code'));
 
-        // LOT: hanya yang punya stok di gudang "from_warehouse"
-        // Kita join lots + items + inventory_stocks untuk dapat stock_remain per LOT per gudang
-        $lotsQuery = Lot::query()
-            ->selectRaw('
-            lots.id,
-            lots.item_id,
-            lots.code as lot_code,
-            lots.unit as uom,
-            items.code as item_code,
-            items.name as item_name,
-            COALESCE(SUM(inventory_stocks.qty), 0) as stock_remain
-        ')
-            ->join('items', 'items.id', '=', 'lots.item_id')
-            ->leftJoin('inventory_stocks', function ($q) use ($fromWarehouseId) {
-                $q->on('inventory_stocks.lot_id', '=', 'lots.id');
-                if ($fromWarehouseId) {
-                    $q->where('inventory_stocks.warehouse_id', $fromWarehouseId);
-                }
-            })
-            ->groupBy('lots.id', 'lots.item_id', 'lots.code', 'lots.unit', 'items.code', 'items.name')
-            ->orderBy('lots.code');
+        $lots = $this->loadLotsWithStock($fromWarehouseId);
 
-        // Hanya tampilkan LOT yang punya stok > 0
-        $lots = $lotsQuery
-            ->having('stock_remain', '>', 0)
-            ->get();
-
-        // Auto code gudang tujuan: CUT-EXT-[EMP] (atau SEW/FIN sesuai process)
         $autoToWarehouseCode = null;
         if ($operatorCode) {
             $autoToWarehouseCode = $this->generateAutoToWarehouseCode($defaultProcess, $operatorCode);
         }
+
+        $bundles = $this->loadAvailableBundles($fromWarehouseId);
 
         return view('inventory.external_transfers.create', [
             'warehouses' => $warehouses,
@@ -89,6 +66,8 @@ class ExternalTransferController extends Controller
             'defaultProcess' => $defaultProcess,
             'defaultFromWarehouseId' => $defaultFromWarehouseId,
             'autoToWarehouseCode' => $autoToWarehouseCode,
+            'transferType' => $transferType,
+            'bundles' => $bundles,
         ]);
     }
 
@@ -100,7 +79,12 @@ class ExternalTransferController extends Controller
     public function show(ExternalTransfer $transfer)
     {
 
-        $transfer->load(['fromWarehouse', 'toWarehouse', 'lines.lot.item']);
+        $transfer->load([
+            'fromWarehouse',
+            'toWarehouse',
+            'lines.lot.item',
+            'bundleLines.cuttingBundle.item',
+        ]);
         return view('inventory.external_transfers.show', compact('transfer'));
     }
     public function update(Request $request, ExternalTransfer $transfer)
@@ -115,6 +99,45 @@ class ExternalTransferController extends Controller
         return redirect()
             ->route('inventory.external_transfers.show', $transfer->id)
             ->with('success', 'Status External Transfer berhasil diperbarui.');
+    }
+
+    public function receive(ExternalTransfer $transfer)
+    {
+        if ($transfer->status !== 'sent') {
+            return redirect()
+                ->route('inventory.external_transfers.show', $transfer->id)
+                ->with('error', 'Hanya dokumen dengan status sent yang dapat diterima.');
+        }
+
+        $transfer->load(['bundleLines.cuttingBundle']);
+
+        DB::transaction(function () use ($transfer) {
+            if ($transfer->transfer_type === 'sewing_bundle') {
+                foreach ($transfer->bundleLines as $line) {
+                    $bundle = $line->cuttingBundle;
+                    if (!$bundle) {
+                        continue;
+                    }
+
+                    $qty = (float) $line->qty;
+
+                    $bundle->update([
+                        'qty_in_transfer' => max(0, (float) $bundle->qty_in_transfer - $qty),
+                        'qty_reserved_for_sewing' => max(0, (float) $bundle->qty_reserved_for_sewing - $qty),
+                        'current_warehouse_id' => $transfer->to_warehouse_id,
+                        'sewing_status' => 'in_sewing',
+                    ]);
+
+                    // TODO: sambungkan ke InventoryService::transferBundle jika sudah tersedia
+                }
+            }
+
+            $transfer->update(['status' => 'received']);
+        });
+
+        return redirect()
+            ->route('inventory.external_transfers.show', $transfer->id)
+            ->with('success', 'Transfer berhasil diterima.');
     }
 
 /**
@@ -147,126 +170,237 @@ class ExternalTransferController extends Controller
 
         return "{$proc3}-EXT-{$op3}";
     }
+
+    protected function generateTransferCode(string $process, Carbon $date): string
+    {
+        $prefix = match ($process) {
+            'cutting' => 'EXT-CUT',
+            'sewing' => 'EXT-SEW',
+            'finishing' => 'EXT-FIN',
+            default => 'EXT-OTH',
+        };
+
+        $ymd = $date->format('ymd');
+
+        $countToday = ExternalTransfer::where('process', $process)
+            ->whereDate('date', $date->toDateString())
+            ->count();
+
+        $seq = str_pad($countToday + 1, 3, '0', STR_PAD_LEFT);
+
+        return "{$prefix}-{$ymd}-{$seq}";
+    }
+
+    protected function resolveDestinationWarehouse(string $transferType, string $process, string $operatorCode): int
+    {
+        if ($transferType === 'sewing_bundle') {
+            $warehouse = Warehouse::firstOrCreate(
+                ['code' => 'WIP-SEW'],
+                ['name' => 'WIP Sewing']
+            );
+
+            return $warehouse->id;
+        }
+
+        $toWarehouseCode = $this->generateAutoToWarehouseCode($process, $operatorCode);
+
+        return Warehouse::firstOrCreate(
+            ['code' => $toWarehouseCode],
+            [
+                'name' => $toWarehouseCode . ' (Vendor)',
+                'type' => 'external',
+            ]
+        )->id;
+    }
+
+    protected function loadLotsWithStock(?int $fromWarehouseId)
+    {
+        $lotsQuery = Lot::query()
+            ->selectRaw('
+            lots.id,
+            lots.item_id,
+            lots.code as lot_code,
+            lots.unit as uom,
+            items.code as item_code,
+            items.name as item_name,
+            COALESCE(SUM(inventory_stocks.qty), 0) as stock_remain
+        ')
+            ->join('items', 'items.id', '=', 'lots.item_id')
+            ->leftJoin('inventory_stocks', function ($q) use ($fromWarehouseId) {
+                $q->on('inventory_stocks.lot_id', '=', 'lots.id');
+                if ($fromWarehouseId) {
+                    $q->where('inventory_stocks.warehouse_id', $fromWarehouseId);
+                }
+            })
+            ->groupBy('lots.id', 'lots.item_id', 'lots.code', 'lots.unit', 'items.code', 'items.name')
+            ->orderBy('lots.code');
+
+        return $lotsQuery
+            ->having('stock_remain', '>', 0)
+            ->get();
+    }
+
+    protected function loadAvailableBundles(?int $warehouseId)
+    {
+        $query = CuttingBundle::query()
+            ->with(['item'])
+            ->where('status', 'qc_done')
+            ->whereRaw('COALESCE(qty_ok,0) - COALESCE(qty_reserved_for_sewing,0) - COALESCE(qty_in_transfer,0) - COALESCE(qty_sewn_ok,0) - COALESCE(qty_sewn_reject,0) > 0');
+
+        if ($warehouseId) {
+            $query->where(function ($q) use ($warehouseId) {
+                $q->whereNull('current_warehouse_id')
+                    ->orWhere('current_warehouse_id', $warehouseId);
+            });
+        }
+
+        return $query
+            ->orderBy('bundle_code')
+            ->limit(500)
+            ->get();
+    }
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $transferType = $request->input('transfer_type', 'material');
+
+        $rules = [
             'date' => ['required', 'date'],
             'process' => ['required', 'in:cutting,sewing,finishing,other'],
             'operator_code' => ['required', 'string', 'max:50'],
             'from_warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'transfer_type' => ['required', Rule::in(['material', 'sewing_bundle'])],
+        ];
 
-            'lines' => ['required', 'array', 'min:1'],
-            'lines.*.lot_id' => ['required', 'integer', 'exists:lots,id'],
-            'lines.*.item_id' => ['required', 'integer', 'exists:items,id'],
-            'lines.*.qty' => ['required', 'numeric', 'gt:0'],
-            'lines.*.uom' => ['nullable', 'string', 'max:16'],
-            'lines.*.notes' => ['nullable', 'string', 'max:500'],
-        ], [
+        if ($transferType === 'sewing_bundle') {
+            $rules = array_merge($rules, [
+                'bundle_lines' => ['required', 'array', 'min:1'],
+                'bundle_lines.*.cutting_bundle_id' => ['required', 'integer', 'exists:cutting_bundles,id'],
+                'bundle_lines.*.qty' => ['required', 'numeric', 'gt:0'],
+                'bundle_lines.*.notes' => ['nullable', 'string', 'max:500'],
+            ]);
+        } else {
+            $rules = array_merge($rules, [
+                'lines' => ['required', 'array', 'min:1'],
+                'lines.*.lot_id' => ['required', 'integer', 'exists:lots,id'],
+                'lines.*.item_id' => ['required', 'integer', 'exists:items,id'],
+                'lines.*.qty' => ['required', 'numeric', 'gt:0'],
+                'lines.*.uom' => ['nullable', 'string', 'max:16'],
+                'lines.*.notes' => ['nullable', 'string', 'max:500'],
+            ]);
+        }
+
+        $validated = $request->validate($rules, [
             'lines.required' => 'Minimal harus ada 1 LOT yang dipilih.',
+            'bundle_lines.required' => 'Minimal harus ada 1 bundle yang dipilih.',
         ]);
 
         $user = Auth::user();
 
         DB::transaction(function () use ($validated, $user) {
-
-            $date = $validated['date'];
-            $process = $validated['process'];
+            $transferType = $validated['transfer_type'];
+            $date = Carbon::parse($validated['date']);
+            $process = $transferType === 'sewing_bundle' ? 'sewing' : $validated['process'];
             $operatorCode = $validated['operator_code'];
             $fromWarehouse = (int) $validated['from_warehouse_id'];
             $notes = $validated['notes'] ?? null;
-            $linesInput = $validated['lines'];
 
-            // ==== 1. Tentukan / buat gudang tujuan berdasarkan process + operator ====
-            // contoh: cutting + MRF -> CUT-EXT-MRF
-            $toWarehouseCode = $this->generateAutoToWarehouseCode($process, $operatorCode);
+            $toWarehouseId = $this->resolveDestinationWarehouse($transferType, $process, $operatorCode);
+            $code = $this->generateTransferCode($process, $date);
 
-            /** @var Warehouse $toWarehouse */
-            $toWarehouse = Warehouse::firstOrCreate(
-                ['code' => $toWarehouseCode],
-                [
-                    'name' => $toWarehouseCode . ' (Vendor)',
-                    // kalau kamu punya kolom type, pakai 'external' / 'vendor'
-                    'type' => 'external',
-                ]
-            );
-
-            $toWarehouseId = $toWarehouse->id;
-
-            // ==== 2. Generate kode dokumen EXT-YYYYMMDD-### ====
-            $dateStr = date('Ymd', strtotime($date));
-            $prefix = 'EXT-' . $dateStr . '-';
-
-            $last = ExternalTransfer::where('code', 'like', $prefix . '%')
-                ->orderBy('code', 'desc')
-                ->first();
-
-            if ($last) {
-                $lastNumber = (int) substr($last->code, strlen($prefix));
-                $nextNumber = $lastNumber + 1;
-            } else {
-                $nextNumber = 1;
-            }
-
-            $code = $prefix . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
-
-            // ==== 3. Buat header external_transfer ====
             /** @var ExternalTransfer $transfer */
             $transfer = ExternalTransfer::create([
                 'code' => $code,
-                'date' => $date,
+                'date' => $date->toDateString(),
                 'process' => $process,
                 'operator_code' => $operatorCode,
+                'transfer_type' => $transferType,
+                'direction' => 'out',
                 'from_warehouse_id' => $fromWarehouse,
                 'to_warehouse_id' => $toWarehouseId,
-                'status' => 'sent', // sesuai teks di Blade
+                'status' => 'sent',
                 'notes' => $notes,
                 'created_by' => $user?->id,
             ]);
 
-            // ==== 4. Simpan detail per LOT + mutasi stok per LOT ====
-            foreach ($linesInput as $line) {
-                // extra safety: skip kalau qty <= 0
-                $qty = (float) ($line['qty'] ?? 0);
-                if ($qty <= 0) {
-                    continue;
+            if ($transferType === 'sewing_bundle') {
+                foreach ($validated['bundle_lines'] as $line) {
+                    $qty = (float) ($line['qty'] ?? 0);
+                    if ($qty <= 0) {
+                        continue;
+                    }
+
+                    /** @var CuttingBundle $bundle */
+                    $bundle = CuttingBundle::with('item')
+                        ->lockForUpdate()
+                        ->findOrFail($line['cutting_bundle_id']);
+
+                    $available = $bundle->availableQtyForSewing();
+                    if ($qty > $available) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'bundle_lines' => [
+                                "Qty kirim untuk bundle {$bundle->bundle_code} melebihi stok tersedia ({$available}).",
+                            ],
+                        ]);
+                    }
+
+                    ExternalTransferBundleLine::create([
+                        'external_transfer_id' => $transfer->id,
+                        'cutting_bundle_id' => $bundle->id,
+                        'qty' => $qty,
+                        'unit' => $bundle->unit ?? 'pcs',
+                        'notes' => $line['notes'] ?? null,
+                    ]);
+
+                    $bundle->update([
+                        'qty_reserved_for_sewing' => (float) $bundle->qty_reserved_for_sewing + $qty,
+                        'qty_in_transfer' => (float) $bundle->qty_in_transfer + $qty,
+                        'sewing_status' => 'in_transfer',
+                        'current_warehouse_id' => $fromWarehouse,
+                    ]);
                 }
 
-                /** @var Lot $lot */
-                $lot = Lot::with('item')->findOrFail($line['lot_id']);
+                // TODO: sambungkan ke InventoryService untuk mutasi stok bundle jika sudah siap
+            } else {
+                foreach ($validated['lines'] as $line) {
+                    $qty = (float) ($line['qty'] ?? 0);
+                    if ($qty <= 0) {
+                        continue;
+                    }
 
-                $uom = $line['uom'] ?? $lot->unit ?? ($lot->item->default_unit ?? 'm');
+                    /** @var Lot $lot */
+                    $lot = Lot::with('item')->findOrFail($line['lot_id']);
+                    $uom = $line['uom'] ?? $lot->unit ?? ($lot->item->default_unit ?? 'm');
 
-                // 4a. simpan line
-                ExternalTransferLine::create([
-                    'external_transfer_id' => $transfer->id,
-                    'lot_id' => $lot->id,
-                    'item_id' => $lot->item_id,
-                    'item_code' => $lot->item->code,
-                    'qty' => $qty,
-                    'unit' => $uom,
-                    'notes' => $line['notes'] ?? null,
-                ]);
+                    ExternalTransferLine::create([
+                        'external_transfer_id' => $transfer->id,
+                        'lot_id' => $lot->id,
+                        'item_id' => $lot->item_id,
+                        'item_code' => $lot->item->code,
+                        'qty' => $qty,
+                        'unit' => $uom,
+                        'notes' => $line['notes'] ?? null,
+                    ]);
 
-                // 4b. mutasi stok LOT: from -> to
-                InventoryService::transferLot([
-                    'from_warehouse_id' => $fromWarehouse,
-                    'to_warehouse_id' => $toWarehouseId,
-                    'lot_id' => $lot->id,
-                    'item_id' => $lot->item_id,
-                    'item_code' => $lot->item->code,
-                    'unit' => $uom,
-                    'qty' => $qty,
-                    'date' => $date,
-                    'ref_code' => $code,
-                    'category' => 'rawmaterial', // cutting/sewing/finishing masih pakai kain
-                ]);
+                    InventoryService::transferLot([
+                        'from_warehouse_id' => $fromWarehouse,
+                        'to_warehouse_id' => $toWarehouseId,
+                        'lot_id' => $lot->id,
+                        'item_id' => $lot->item_id,
+                        'item_code' => $lot->item->code,
+                        'unit' => $uom,
+                        'qty' => $qty,
+                        'date' => $date->toDateString(),
+                        'ref_code' => $code,
+                        'category' => 'rawmaterial',
+                    ]);
+                }
             }
         });
 
         return redirect()
             ->route('inventory.external_transfers.index')
-            ->with('success', 'External Transfer berhasil dibuat & stok LOT sudah dipindahkan ke gudang vendor.');
+            ->with('success', 'External Transfer berhasil dibuat.');
     }
 
     // index() dll bisa kamu isi belakangan

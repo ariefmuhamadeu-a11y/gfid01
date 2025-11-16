@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Warehouse;
+use App\Models\ExternalTransferBundleLine;
+use App\Models\SewingQcLine;
 
 class CuttingBundle extends Model
 {
@@ -23,6 +26,12 @@ class CuttingBundle extends Model
         'qty_reject', // ⬅ TAMBAH
         'unit',
         'status',
+        'current_warehouse_id',
+        'sewing_status',
+        'qty_reserved_for_sewing',
+        'qty_in_transfer',
+        'qty_sewn_ok',
+        'qty_sewn_reject',
         'notes',
     ];
 
@@ -30,6 +39,10 @@ class CuttingBundle extends Model
         'qty_cut' => 'decimal:2',
         'qty_ok' => 'decimal:2',
         'qty_reject' => 'decimal:2',
+        'qty_reserved_for_sewing' => 'decimal:2',
+        'qty_in_transfer' => 'decimal:2',
+        'qty_sewn_ok' => 'decimal:2',
+        'qty_sewn_reject' => 'decimal:2',
     ];
 
     /* =====================
@@ -54,6 +67,31 @@ class CuttingBundle extends Model
     public function productionBatch()
     {
         return $this->belongsTo(ProductionBatch::class);
+    }
+
+    public function currentWarehouse()
+    {
+        return $this->belongsTo(Warehouse::class, 'current_warehouse_id');
+    }
+
+    public function transferBundleLines()
+    {
+        return $this->hasMany(ExternalTransferBundleLine::class, 'cutting_bundle_id');
+    }
+
+    public function availableQtyForSewing(): float
+    {
+        $qtyOk = (float) ($this->qty_ok ?? 0);
+        $reserved = (float) ($this->qty_reserved_for_sewing ?? 0);
+        $inTransfer = (float) ($this->qty_in_transfer ?? 0);
+        $sewn = (float) ($this->qty_sewn_ok ?? 0) + (float) ($this->qty_sewn_reject ?? 0);
+
+        return max(0, $qtyOk - $reserved - $inTransfer - $sewn);
+    }
+
+    public function sewingQcLines()
+    {
+        return $this->hasMany(SewingQcLine::class, 'cutting_bundle_id');
     }
 
 }
