@@ -132,8 +132,8 @@
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label form-label-sm">Tanggal diterima</label>
-                        <input type="date" name="date_received" class="form-control form-control-sm"
-                            value="{{ old('date_received', now()->toDateString()) }}" required>
+                        <input type="datetime-local" name="date_received" class="form-control"
+                            value="{{ old('date_received', now()->format('Y-m-d\TH:i')) }}">
                     </div>
                     <div class="col-md-8">
                         <label class="form-label form-label-sm">Catatan (opsional)</label>

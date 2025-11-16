@@ -18,6 +18,11 @@ class SewingBatch extends Model
         'finished_at',
     ];
 
+    protected $casts = [
+        'started_at' => 'datetime',
+        'finished_at' => 'datetime',
+    ];
+
     public function productionBatch()
     {
         return $this->belongsTo(ProductionBatch::class);

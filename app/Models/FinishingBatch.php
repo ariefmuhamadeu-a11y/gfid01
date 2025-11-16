@@ -12,6 +12,11 @@ class FinishingBatch extends Model
         'started_at', 'finished_at',
     ];
 
+    protected $casts = [
+        'started_at' => 'datetime',
+        'finished_at' => 'datetime',
+    ];
+
     public function sewingBatch()
     {
         return $this->belongsTo(SewingBatch::class);
@@ -26,4 +31,5 @@ class FinishingBatch extends Model
     {
         return $this->hasMany(FinishingBundleLine::class);
     }
+
 }

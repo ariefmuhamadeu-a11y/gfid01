@@ -38,8 +38,9 @@ class ProductionBatch extends Model
         'date_received' => 'date',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
-        'total_output_qty' => 'decimal:4',
-        'total_reject_qty' => 'decimal:4',
+        'total_output_qty' => 'decimal:2',
+        'total_reject_qty' => 'decimal:2',
+
     ];
 
     /* =========================

@@ -6,9 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class FinishingBundleLine extends Model
 {
+    protected $table = 'finishing_bundle_lines';
+
     protected $fillable = [
-        'finishing_batch_id', 'sewing_bundle_line_id',
-        'qty_input', 'qty_ok', 'qty_reject', 'note',
+        'finishing_batch_id',
+        'sewing_bundle_line_id',
+        'qty_input',
+        'qty_ok',
+        'qty_reject',
+        'note',
     ];
 
     public function finishingBatch()

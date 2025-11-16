@@ -75,7 +75,7 @@
                                 </td>
                                 <td>
                                     <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                        {{ strtoupper($batch->qc_status) }}
+                                        {{ strtoupper($batch->status) }}
                                     </span>
                                 </td>
                                 <td class="text-center">

@@ -104,10 +104,12 @@ Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
             Route::get('/{finishingBatch}/edit', [FinishingController::class, 'edit'])
                 ->name('edit');
 
-            Route::put('/{finishingBatch}', [FinishingController::class, 'update'])
-                ->name('update');
+            // Route::put('/{finishingBatch}', [FinishingController::class, 'update'])
+            //     ->name('update');
 
-            Route::post('/{finishingBatch}/complete', [FinishingController::class, 'complete'])
+            Route::put('/{finishingBatch}', [FinishingController::class, 'update'])->name('update');
+
+            Route::post('/{finishing}/complete', [FinishingController::class, 'complete'])
                 ->name('complete');
 
             Route::get('/{finishingBatch}', [FinishingController::class, 'show'])

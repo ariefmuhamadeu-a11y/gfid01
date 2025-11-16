@@ -17,7 +17,7 @@ class WipSewingController extends Controller
      */
     public function index()
     {
-        // asumsi: kolom status di production_batches: waiting_qc, in_progress, qc_done
+        // asumsi: kolom qc_status di production_batches: waiting_qc, in_progress, qc_done
         $batches = ProductionBatch::where('status', 'qc_done')
             ->withCount('sewingBatches')
             ->orderByDesc('created_at')
@@ -159,9 +159,14 @@ class WipSewingController extends Controller
      * Lihat detail sewing batch.
      * (Nanti kita isi view-nya di step berikut)
      */
+
     public function show(SewingBatch $sewingBatch)
     {
-        $sewingBatch->load(['productionBatch', 'employee', 'lines.cuttingBundle']);
+        $sewingBatch->load([
+            'productionBatch',
+            'employee',
+            'lines.cuttingBundle.item',
+        ]);
 
         return view('production.wip_sewing.show', compact('sewingBatch'));
     }
@@ -171,7 +176,12 @@ class WipSewingController extends Controller
      */
     public function edit(SewingBatch $sewingBatch)
     {
-        $sewingBatch->load(['productionBatch', 'employee', 'lines.cuttingBundle']);
+        $sewingBatch->load([
+            'productionBatch',
+            'employee',
+            'lines.cuttingBundle.lot',
+            'lines.cuttingBundle.item',
+        ]);
 
         return view('production.wip_sewing.edit', compact('sewingBatch'));
     }
@@ -180,61 +190,80 @@ class WipSewingController extends Controller
      * Simpan update qty_ok / qty_reject per bundle.
      * (Logic detail akan kita buat di STEP 3)
      */
+
+// ...
+
     public function update(Request $request, SewingBatch $sewingBatch)
     {
-        $sewingBatch->load('lines');
+        $sewingBatch->load('lines.cuttingBundle');
 
-        $data = $request->validate([
+        $validated = $request->validate([
             'lines' => ['required', 'array'],
             'lines.*.id' => ['required', 'integer', 'exists:sewing_bundle_lines,id'],
             'lines.*.qty_ok' => ['required', 'integer', 'min:0'],
-            'lines.*.qty_reject' => ['required', 'integer', 'min:0'],
             'lines.*.note' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $linesInput = $data['lines'];
+        $linesInput = $validated['lines'];
+        // Validasi: qty_ok <= qty_input
+        foreach ($linesInput as $index => $input) {
+            $lineId = $input['id'];
 
-        // Validasi custom: qty_ok + qty_reject <= qty_input per baris
-        foreach ($sewingBatch->lines as $line) {
-            if (!isset($linesInput[$line->id])) {
-                continue;
-            }
+            /** @var SewingBundleLine|null $line */
+            $line = $sewingBatch->lines->firstWhere('id', $lineId);
 
-            $input = $linesInput[$line->id];
-            $ok = (int) $input['qty_ok'];
-            $reject = (int) $input['qty_reject'];
-
-            if ($ok + $reject > $line->qty_input) {
+            if (!$line) {
                 return back()
                     ->withInput()
                     ->withErrors([
-                        "lines.{$line->id}.qty_ok" =>
-                        "Total OK + Reject untuk bundle {$line->cuttingBundle?->code} melebihi qty input ({$line->qty_input}).",
+                        "lines.$index.id" => "Data line tidak valid untuk sewing batch ini.",
+                    ]);
+            }
+
+            $qtyInput = (int) $line->qty_input;
+            $ok = (int) $input['qty_ok'];
+
+            if ($ok > $qtyInput) {
+                $code = $line->cuttingBundle?->code ?? $line->id;
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        "lines.$index.qty_ok" =>
+                        "Qty OK untuk bundle {$code} melebihi qty input ({$qtyInput}).",
                     ]);
             }
         }
 
-        // Kalau semua valid, simpan & hitung ulang total di sewing_batches
+        // Simpan & hitung total
         DB::transaction(function () use ($sewingBatch, $linesInput) {
+            $totalInput = 0;
             $totalOk = 0;
             $totalReject = 0;
 
-            foreach ($sewingBatch->lines as $line) {
-                if (!isset($linesInput[$line->id])) {
+            foreach ($linesInput as $index => $input) {
+                $lineId = $input['id'];
+
+                /** @var SewingBundleLine|null $line */
+                $line = $sewingBatch->lines->firstWhere('id', $lineId);
+                if (!$line) {
                     continue;
                 }
 
-                $input = $linesInput[$line->id];
+                $qtyInput = (int) $line->qty_input;
+                $qtyOk = (int) $input['qty_ok'];
+                $qtyReject = max($qtyInput - $qtyOk, 0);
 
-                $line->qty_ok = (int) $input['qty_ok'];
-                $line->qty_reject = (int) $input['qty_reject'];
+                $line->qty_ok = $qtyOk;
+                $line->qty_reject = $qtyReject;
                 $line->note = $input['note'] ?? null;
                 $line->save();
 
-                $totalOk += $line->qty_ok;
-                $totalReject += $line->qty_reject;
+                $totalInput += $qtyInput;
+                $totalOk += $qtyOk;
+                $totalReject += $qtyReject;
             }
 
+            $sewingBatch->total_qty_input = $totalInput;
             $sewingBatch->total_qty_ok = $totalOk;
             $sewingBatch->total_qty_reject = $totalReject;
             $sewingBatch->save();
@@ -251,8 +280,27 @@ class WipSewingController extends Controller
      */
     public function complete(Request $request, SewingBatch $sewingBatch)
     {
-        // nanti kita lengkapi di STEP 3
-        return back()->with('info', 'Complete sewing belum diimplementasikan.');
+        if ($sewingBatch->status === 'done') {
+            return back()->with('error', 'Batch sudah selesai.');
+        }
+
+        // Pastikan semua bundle valid
+        foreach ($sewingBatch->lines as $line) {
+            if ($line->qty_ok + $line->qty_reject > $line->qty_input) {
+                return back()->with('error',
+                    "Bundle {$line->cuttingBundle->code}: Total OK + Reject melebihi qty input."
+                );
+            }
+        }
+
+        // Update status & waktu selesai
+        $sewingBatch->status = 'done';
+        $sewingBatch->finished_at = now();
+        $sewingBatch->save();
+
+        return redirect()
+            ->route('production.wip_sewing.show', $sewingBatch)
+            ->with('success', 'Sewing Batch berhasil diselesaikan.');
     }
 
     /**

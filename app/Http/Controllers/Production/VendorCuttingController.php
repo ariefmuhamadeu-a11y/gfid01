@@ -271,9 +271,11 @@ class VendorCuttingController extends Controller
             $seq++;
         }
 
-        // Update status batch kalau mau: dari 'received' → 'in_progress' atau tetap
         if ($batch->status === 'received') {
-            $batch->update(['status' => 'in_progress']);
+            $batch->update([
+                'status' => 'in_progress',
+                'started_at' => now(),
+            ]);
         }
 
         return redirect()
@@ -299,6 +301,7 @@ class VendorCuttingController extends Controller
         // 2. Update batch
         $batch->update([
             'status' => 'waiting_qc',
+            'finished_at' => $batch->finished_at ?? now(), // isi kalau belum pernah di-set
         ]);
 
         // 3. OPSIONAL: Buat WIP Cutting agar QC & Sewing bisa pakai stok WIP

@@ -17,8 +17,20 @@ class FinishingController extends Controller
         $sewingDone = SewingBatch::where('status', 'done')
             ->with('productionBatch')
             ->get();
-
         return view('production.finishing.index', compact('sewingDone'));
+    }
+
+    public function show(FinishingBatch $finishingBatch)
+    {
+        $finishingBatch->load([
+            'sewingBatch.productionBatch',
+            'employee',
+            'lines.sewingLine.cuttingBundle.item',
+        ]);
+
+        // dd($finishingBatch); // boleh dipakai debug, tapi nanti dihapus kalau sudah ok
+
+        return view('production.finishing.show', compact('finishingBatch'));
     }
 
     public function createFromSewing(SewingBatch $sewingBatch)
@@ -37,6 +49,7 @@ class FinishingController extends Controller
 
     public function storeFromSewing(Request $request, SewingBatch $sewingBatch)
     {
+        // dd($sewingBatch);
         if ($sewingBatch->status !== 'done') {
             return back()->with('error', 'Sewing belum selesai.');
         }
@@ -80,46 +93,104 @@ class FinishingController extends Controller
         }
     }
 
-    public function edit(FinishingBatch $finishing)
+    public function edit(FinishingBatch $finishingBatch)
     {
-        $finishing->load('lines.sewingLine.cuttingBundle');
-        return view('production.finishing.edit', compact('finishing'));
+        $finishingBatch->load('sewingBatch.productionBatch', 'lines.sewingLine.cuttingBundle', 'employee');
+        // dd($finishingBatch);
+
+        return view('production.finishing.edit', [
+            'finishingBatch' => $finishingBatch,
+        ]);
     }
 
-    public function update(Request $request, FinishingBatch $finishing)
+    public function update(Request $request, FinishingBatch $finishingBatch)
     {
-        $request->validate([
-            'lines' => 'required|array',
+        // $finishingBatch->load('lines.bundle');
+        // $finishingBatch->load('lines.cuttingBundle');
+        $finishingBatch->load('lines.sewingLine.cuttingBundle');
+
+        $validated = $request->validate([
+            'lines' => ['required', 'array'],
+            'lines.*.id' => ['required', 'integer', 'exists:finishing_bundle_lines,id'],
+            'lines.*.qty_ok' => ['required', 'integer', 'min:0'],
+            'lines.*.note' => ['nullable', 'string', 'max:255'],
         ]);
 
-        DB::transaction(function () use ($request, $finishing) {
-            $totalOK = 0;
-            $totalReject = 0;
+        $linesInput = $validated['lines'];
 
-            foreach ($finishing->lines as $line) {
-                $data = $request->lines[$line->id];
+        // Validasi: qty_ok <= qty_input per line
+        foreach ($linesInput as $index => $input) {
+            $lineId = $input['id'];
 
-                if ($data['qty_ok'] + $data['qty_reject'] > $line->qty_input) {
-                    throw new \Exception("Qty melebihi input pada bundle {$line->sewingLine->cuttingBundle->code}");
-                }
+            /** @var FinishingLine|null $line */
+            $line = $finishingBatch->lines->firstWhere('id', $lineId);
 
-                $line->update([
-                    'qty_ok' => $data['qty_ok'],
-                    'qty_reject' => $data['qty_reject'],
-                    'note' => $data['note'] ?? null,
-                ]);
-
-                $totalOK += $data['qty_ok'];
-                $totalReject += $data['qty_reject'];
+            if (!$line) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        "lines.$index.id" => "Data line tidak valid untuk batch finishing ini.",
+                    ]);
             }
 
-            $finishing->update([
-                'total_qty_ok' => $totalOK,
-                'total_qty_reject' => $totalReject,
-            ]);
+            $qtyInput = (int) ($line->qty_input ?? 0);
+            $qtyOk = (int) $input['qty_ok'];
+
+            if ($qtyOk > $qtyInput) {
+                $bundle = $line->sewingLine->cuttingBundle ?? null;
+                $code = $bundle->code ?? $bundle->bundle_code ?? $line->id;
+
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        "lines.$index.qty_ok" =>
+                        "Qty OK untuk bundle {$code} melebihi qty input ({$qtyInput}).",
+                    ]);
+            }
+
+        }
+
+        // Simpan & hitung total
+        DB::transaction(function () use ($finishingBatch, $linesInput) {
+            $totalInput = 0;
+            $totalOk = 0;
+            $totalReject = 0;
+
+            foreach ($linesInput as $index => $input) {
+                $lineId = $input['id'];
+
+                /** @var FinishingLine|null $line */
+                $line = $finishingBatch->lines->firstWhere('id', $lineId);
+                if (!$line) {
+                    continue;
+                }
+
+                $qtyInput = (int) ($line->qty_input ?? 0);
+                $qtyOk = (int) $input['qty_ok'];
+                $qtyReject = max($qtyInput - $qtyOk, 0);
+
+                $line->qty_ok = $qtyOk;
+                $line->qty_reject = $qtyReject;
+                $line->note = $input['note'] ?? null;
+                $line->save();
+
+                $totalInput += $qtyInput;
+                $totalOk += $qtyOk;
+                $totalReject += $qtyReject;
+            }
+
+            $finishingBatch->total_qty_input = $totalInput;
+            $finishingBatch->total_qty_ok = $totalOk;
+            $finishingBatch->total_qty_reject = $totalReject;
+
+            // kalau status masih 'in_progress' atau 'draft' biarin,
+            // finished_at nanti diisi di complete()
+            $finishingBatch->save();
         });
 
-        return back()->with('success', 'Data finishing berhasil disimpan.');
+        return redirect()
+            ->route('production.finishing.edit', $finishingBatch)
+            ->with('success', 'Hasil finishing berhasil disimpan.');
     }
 
     public function complete(FinishingBatch $finishing)
@@ -128,7 +199,8 @@ class FinishingController extends Controller
         $finishing->finished_at = now();
         $finishing->save();
 
-        return redirect()->route('production.finishing.show', $finishing)
+        return redirect()
+            ->route('production.finishing.show', $finishing)
             ->with('success', 'Finishing selesai.');
     }
 
