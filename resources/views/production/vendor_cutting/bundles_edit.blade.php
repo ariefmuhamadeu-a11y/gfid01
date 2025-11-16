@@ -38,7 +38,7 @@
     <div class="page-wrap py-3">
 
         <div class="d-flex align-items-center mb-3">
-            <a href="{{ route('production.vendor_cutting.batches.show', $batch->id) }}"
+            <a href="{{ $backRoute ?? route('production.vendor_cutting.batches.show', $batch->id) }}"
                 class="btn btn-sm btn-outline-secondary me-2">
                 <i class="bi bi-arrow-left"></i>
             </a>
@@ -101,7 +101,7 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ route('production.vendor_cutting.batches.results.update', $batch->id) }}">
+        <form method="POST" action="{{ $formAction ?? route('production.vendor_cutting.batches.results.update', $batch->id) }}">
             @csrf
 
             <div class="card mb-3">

@@ -77,7 +77,7 @@
                 </div>
             </div>
             <div>
-                <a href="{{ route('external-transfers.index') }}" class="btn btn-outline-secondary btn-sm">
+                <a href="{{ route('production.external_transfers.index') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-arrow-left me-1"></i> Kembali
                 </a>
             </div>
@@ -98,7 +98,7 @@
             $oldLines = old('lines', []);
         @endphp
 
-        <form action="{{ route('external-transfers.store') }}" method="post">
+        <form action="{{ route('production.external_transfers.store') }}" method="post">
             @csrf
 
             {{-- HEADER --}}
@@ -390,7 +390,7 @@
                 const proc = procSelect ? procSelect.value : '';
                 const opCode = opSelect ? opSelect.value : '';
 
-                const url = new URL("{{ route('external-transfers.create') }}", window.location.origin);
+                const url = new URL("{{ route('production.external_transfers.create') }}", window.location.origin);
                 if (whId) url.searchParams.set('from_warehouse_id', whId);
                 if (proc) url.searchParams.set('process', proc);
                 if (opCode) url.searchParams.set('operator_code', opCode);

@@ -90,7 +90,7 @@
                 </div>
             </div>
             <div>
-                <a href="{{ route('external-transfers.create') }}" class="btn btn-primary btn-sm">
+                <a href="{{ route('production.external_transfers.create') }}" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i> Dokumen Baru
                 </a>
             </div>
@@ -125,7 +125,7 @@
                         <button type="submit" class="btn btn-outline-secondary btn-sm me-1">
                             <i class="bi bi-funnel me-1"></i> Terapkan
                         </button>
-                        <a href="{{ route('external-transfers.index') }}" class="btn btn-outline-dark btn-sm">
+                        <a href="{{ route('production.external_transfers.index') }}" class="btn btn-outline-dark btn-sm">
                             Reset
                         </a>
                     </div>
@@ -152,7 +152,7 @@
                         @forelse ($rows as $row)
                             <tr>
                                 <td class="ps-3">
-                                    <a href="{{ route('external-transfers.show', $row) }}"
+                                    <a href="{{ route('production.external_transfers.show', $row) }}"
                                         class="mono text-decoration-none">
                                         {{ $row->code }}
                                     </a>
@@ -200,17 +200,17 @@
                                 </td>
                                 <td class="pe-3 text-end">
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{{ route('external-transfers.show', $row) }}"
+                                        <a href="{{ route('production.external_transfers.show', $row) }}"
                                             class="btn btn-outline-secondary">
                                             <i class="bi bi-eye"></i>
                                         </a>
 
                                         @if ($row->status === 'draft')
-                                            <a href="{{ route('external-transfers.edit', $row) }}"
+                                            <a href="{{ route('production.external_transfers.edit', $row) }}"
                                                 class="btn btn-outline-secondary">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
-                                            <form action="{{ route('external-transfers.send', $row) }}" method="post"
+                                            <form action="{{ route('production.external_transfers.send', $row) }}" method="post"
                                                 onsubmit="return confirm('Kirim dokumen ini?')">
                                                 @csrf
                                                 <button class="btn btn-outline-primary" type="submit">
@@ -218,7 +218,7 @@
                                                 </button>
                                             </form>
                                         @elseif($row->status === 'sent')
-                                            <form action="{{ route('external-transfers.receive', $row) }}" method="post"
+                                            <form action="{{ route('production.external_transfers.receive', $row) }}" method="post"
                                                 onsubmit="return confirm('Konfirmasi barang sudah diterima?')">
                                                 @csrf
                                                 <button class="btn btn-outline-success" type="submit">

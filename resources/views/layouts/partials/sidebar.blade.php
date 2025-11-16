@@ -27,24 +27,22 @@
         {{-- ===================== --}}
         <div class="section">Produksi</div>
 
-        {{-- External Transfer (admin only sesuai middleware inventory) --}}
-        @if (auth()->user()->hasRole('admin'))
-            <a class="nav-link {{ request()->routeIs('inventory.external_transfers.*') ? 'active' : '' }}"
-                href="{{ route('inventory.external_transfers.index') }}">
-                <i class="bi bi-box-arrow-up-right"></i><span>External Transfer</span>
-            </a>
-        @endif
-
-        {{-- Vendor Cutting (cutting + admin sesuai middleware production) --}}
         @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('cutting'))
+            <a class="nav-link {{ request()->routeIs('production.external_transfers.*') ? 'active' : '' }}"
+                href="{{ route('production.external_transfers.index') }}">
+                <i class="bi bi-truck"></i><span>External Transfer</span>
+            </a>
+
             <a class="nav-link {{ request()->routeIs('production.vendor_cutting.*') ? 'active' : '' }}"
                 href="{{ route('production.vendor_cutting.index') }}">
                 <i class="bi bi-scissors"></i><span>Vendor Cutting</span>
             </a>
-        @endif
 
-        {{-- QC Cutting (juga cutting + admin, karena satu middleware group) --}}
-        @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('cutting'))
+            <a class="nav-link {{ request()->routeIs('production.cutting_bundles.*') ? 'active' : '' }}"
+                href="{{ route('production.cutting_bundles.index') }}">
+                <i class="bi bi-boxes"></i><span>Cutting Bundles</span>
+            </a>
+
             <a class="nav-link {{ request()->routeIs('production.wip_cutting_qc.*') ? 'active' : '' }}"
                 href="{{ route('production.wip_cutting_qc.index') }}">
                 <i class="bi bi-clipboard-check"></i><span>QC Cutting</span>

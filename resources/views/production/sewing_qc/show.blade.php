@@ -3,6 +3,11 @@
 @section('title', 'QC Sewing - ' . ($bundle->bundle_code ?? $bundle->id))
 
 @section('content')
+    @php
+        $sewingTarget = (float) ($bundle->qty_ok ?? $bundle->qty_cut ?? 0);
+        $alreadyQc = (float) ($bundle->qty_sewn_ok ?? 0) + (float) ($bundle->qty_sewn_reject ?? 0);
+        $remaining = max(0, $sewingTarget - $alreadyQc);
+    @endphp
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
@@ -31,7 +36,7 @@
                     </div>
                     <div class="col-md-4">
                         <div class="small text-muted">Qty QC Cutting</div>
-                        <div class="fw-semibold">{{ number_format((float) $bundle->qty_ok, 2) }} pcs</div>
+                        <div class="fw-semibold">{{ number_format((float) ($bundle->qty_ok ?? $bundle->qty_cut), 2) }} pcs</div>
                     </div>
                     <div class="col-md-4">
                         <div class="small text-muted">Status</div>
@@ -49,7 +54,7 @@
                         <div class="col-md-4">
                             <label class="form-label small">Qty OK</label>
                             <input type="number" name="qty_ok" min="0" step="0.01" class="form-control"
-                                value="{{ old('qty_ok', $bundle->qty_ok - $bundle->qty_sewn_ok - $bundle->qty_sewn_reject) }}">
+                                value="{{ old('qty_ok', $remaining) }}">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small">Qty Reject</label>
@@ -63,7 +68,7 @@
                     </div>
 
                     <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <div class="small text-muted">Qty tersisa untuk QC: {{ number_format(max(0, $bundle->qty_ok - $bundle->qty_sewn_ok - $bundle->qty_sewn_reject), 2) }} pcs</div>
+                        <div class="small text-muted">Qty tersisa untuk QC: {{ number_format($remaining, 2) }} pcs</div>
                         <button class="btn btn-primary" type="submit">Simpan QC</button>
                     </div>
                 </form>

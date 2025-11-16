@@ -216,7 +216,7 @@ class ExternalTransferController extends Controller
         });
 
         return redirect()
-            ->route('external-transfers.index')
+            ->route('production.external_transfers.index')
             ->with('success', 'Dokumen external transfer berhasil dibuat (status: draft).');
     }
 
@@ -239,7 +239,7 @@ class ExternalTransferController extends Controller
     {
         if ($externalTransfer->status !== 'draft') {
             return redirect()
-                ->route('external-transfers.show', $externalTransfer)
+                ->route('production.external_transfers.show', $externalTransfer)
                 ->with('error', 'Dokumen yang sudah dikirim tidak dapat diedit.');
         }
 
@@ -263,7 +263,7 @@ class ExternalTransferController extends Controller
 
         $externalTransfer->load('lines.lot', 'lines.item');
 
-        return view('production.external.edit', [
+        return view('production.external_transfers.edit', [
             'row' => $externalTransfer,
             'warehouses' => $warehouses,
             'lots' => $lots,
@@ -277,7 +277,7 @@ class ExternalTransferController extends Controller
     {
         if ($externalTransfer->status !== 'draft') {
             return redirect()
-                ->route('external-transfers.show', $externalTransfer)
+                ->route('production.external_transfers.show', $externalTransfer)
                 ->with('erroror', 'Dokumen yang sudah dikirim tidak dapat diubah.');
         }
 
@@ -325,7 +325,7 @@ class ExternalTransferController extends Controller
         });
 
         return redirect()
-            ->route('external-transfers.show', $externalTransfer)
+            ->route('production.external_transfers.show', $externalTransfer)
             ->with('success', 'Dokumen external transfer berhasil diperbarui.');
     }
 
@@ -428,7 +428,7 @@ class ExternalTransferController extends Controller
         });
 
         return redirect()
-            ->route('external-transfers.index')
+            ->route('production.external_transfers.index')
             ->with('success', "Dokumen {$code} berhasil dihapus.");
     }
 
