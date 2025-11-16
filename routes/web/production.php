@@ -4,6 +4,7 @@ use App\Http\Controllers\Production\FinishingController;
 use App\Http\Controllers\Production\VendorCuttingController;
 use App\Http\Controllers\Production\WipCuttingQcController;
 use App\Http\Controllers\Production\WipSewingController;
+use App\Http\Controllers\Production\SewingQcController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
@@ -84,6 +85,17 @@ Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
 
                 Route::post('/{sewingBatch}/complete', [WipSewingController::class, 'complete'])
                     ->name('complete');
+            });
+
+        // ==========================
+        // QC Sewing
+        // ==========================
+        Route::prefix('wip-sewing-qc')
+            ->name('wip_sewing_qc.')
+            ->group(function () {
+                Route::get('/', [SewingQcController::class, 'index'])->name('index');
+                Route::get('/{bundle}', [SewingQcController::class, 'show'])->name('show');
+                Route::post('/{bundle}', [SewingQcController::class, 'update'])->name('update');
             });
 
         // ==========================

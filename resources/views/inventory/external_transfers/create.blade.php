@@ -96,8 +96,10 @@
 
         @php
             $oldLines = old('lines', []);
+            $oldBundleLines = old('bundle_lines', []);
             $proc = old('process', $defaultProcess ?? 'cutting');
             $fromId = old('from_warehouse_id', $defaultFromWarehouseId ?? null);
+            $oldTransferType = old('transfer_type', $transferType ?? 'material');
         @endphp
 
         <form action="{{ route('inventory.external_transfers.store') }}" method="post">
@@ -116,6 +118,20 @@
                             @error('date')
                                 <div class="text-danger small">{{ $message }}</div>
                             @enderror
+                        </div>
+
+                        {{-- TIPE TRANSFER --}}
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small required">Transfer Tipe</label>
+                            <select name="transfer_type" id="transfer-type-select" class="form-select form-select-sm">
+                                <option value="material" {{ $oldTransferType === 'material' ? 'selected' : '' }}>
+                                    Material (LOT kain)
+                                </option>
+                                <option value="sewing_bundle" {{ $oldTransferType === 'sewing_bundle' ? 'selected' : '' }}>
+                                    Sewing Bundle (hasil cutting)
+                                </option>
+                            </select>
+                            <div class="help">Pilih Sewing Bundle untuk kirim per iket hasil QC Cutting.</div>
                         </div>
 
                         {{-- PROSES --}}
@@ -209,120 +225,204 @@
             </div>
 
             {{-- DETAIL LOT (CHECKLIST) --}}
-            <div class="card mb-3">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div>
-                            <div class="fw-semibold small text-uppercase">Detail LOT</div>
-                            <div class="help mt-1">
-                                Centang LOT yang akan dikirim. Saat dicentang, qty otomatis diisi = stok LOT.
-                                Kamu tetap bisa edit qty jika kirim sebagian.
+            <div id="material-section" class="{{ $oldTransferType === 'sewing_bundle' ? 'd-none' : '' }}">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <div class="fw-semibold small text-uppercase">Detail LOT</div>
+                                <div class="help mt-1">
+                                    Centang LOT yang akan dikirim. Saat dicentang, qty otomatis diisi = stok LOT.
+                                    Kamu tetap bisa edit qty jika kirim sebagian.
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    @if ($lots->isEmpty())
-                        <div class="alert alert-warning small mb-2">
-                            Gudang yang dipilih
-                            <span class="mono">
-                                {{ $warehouses->firstWhere('id', $fromId)?->code ?? '-' }}
-                            </span>
-                            belum punya LOT aktif. Pilih gudang lain atau buat LOT baru terlebih dahulu.
+                        @if ($lots->isEmpty())
+                            <div class="alert alert-warning small mb-2">
+                                Gudang yang dipilih
+                                <span class="mono">
+                                    {{ $warehouses->firstWhere('id', $fromId)?->code ?? '-' }}
+                                </span>
+                                belum punya LOT aktif. Pilih gudang lain atau buat LOT baru terlebih dahulu.
+                            </div>
+                        @endif
+
+                        <div class="table-wrap">
+                            <table class="table table-sm align-middle mb-0" id="lines-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;" class="text-center">
+                                            <input type="checkbox" class="form-check-input" id="check-all">
+                                        </th>
+                                        <th style="min-width: 150px;">LOT</th>
+                                        <th style="min-width: 200px;">Item</th>
+                                        <th style="min-width: 80px;" class="text-end">Stok</th>
+                                        <th style="min-width: 120px;" class="text-end">Qty Kirim</th>
+                                        <th style="min-width: 80px;">Satuan</th>
+                                        <th style="min-width: 150px;">Catatan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($lots as $idx => $lot)
+                                        @php
+                                            $rowOld = $oldLines[$idx] ?? [];
+                                            $oldQty = $rowOld['qty'] ?? '';
+                                            $oldUom = $rowOld['uom'] ?? $lot->uom;
+                                            $oldNotes = $rowOld['notes'] ?? '';
+                                        @endphp
+                                        <tr>
+                                            {{-- CHECK --}}
+                                            <td class="text-center">
+                                                <input type="checkbox" class="form-check-input line-check"
+                                                    data-stock="{{ (float) $lot->stock_remain }}"
+                                                    {{ (float) $oldQty > 0 ? 'checked' : '' }}>
+                                                {{-- hidden lot & item --}}
+                                                <input type="hidden" name="lines[{{ $idx }}][lot_id]"
+                                                    value="{{ $lot->id }}">
+                                                <input type="hidden" name="lines[{{ $idx }}][item_id]"
+                                                    value="{{ $lot->item_id }}">
+                                            </td>
+
+                                            {{-- LOT CODE --}}
+                                            <td class="mono small">
+                                                {{ $lot->lot_code }}
+                                            </td>
+
+                                            {{-- ITEM --}}
+                                            <td>
+                                                <div class="mono small">
+                                                    {{ $lot->item_code }} {{ $lot->item_name }}
+                                                </div>
+                                            </td>
+
+                                            {{-- STOK SISA --}}
+                                            <td class="text-end">
+                                                <span class="badge-stock mono">
+                                                    {{ number_format($lot->stock_remain, 2) }}
+                                                </span>
+                                            </td>
+
+                                            {{-- QTY KIRIM --}}
+                                            <td>
+                                                <input type="number" step="0.01" min="0"
+                                                    name="lines[{{ $idx }}][qty]"
+                                                    class="form-control form-control-sm text-end mono line-qty"
+                                                    data-stock="{{ (float) $lot->stock_remain }}"
+                                                    value="{{ $oldQty !== '' ? $oldQty : '' }}">
+                                            </td>
+
+                                            {{-- UOM --}}
+                                            <td>
+                                                <input type="text" name="lines[{{ $idx }}][uom]"
+                                                    class="form-control form-control-sm text-center mono"
+                                                    value="{{ $oldUom }}">
+                                            </td>
+
+                                            {{-- NOTES --}}
+                                            <td>
+                                                <input type="text" name="lines[{{ $idx }}][notes]"
+                                                    class="form-control form-control-sm" value="{{ $oldNotes }}">
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted small">
+                                                Tidak ada LOT untuk gudang ini.
+                                                Pilih gudang lain di atas untuk melihat LOT lain.
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
                         </div>
-                    @endif
 
-                    <div class="table-wrap">
-                        <table class="table table-sm align-middle mb-0" id="lines-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 40px;" class="text-center">
-                                        <input type="checkbox" class="form-check-input" id="check-all">
-                                    </th>
-                                    <th style="min-width: 150px;">LOT</th>
-                                    <th style="min-width: 200px;">Item</th>
-                                    <th style="min-width: 80px;" class="text-end">Stok</th>
-                                    <th style="min-width: 120px;" class="text-end">Qty Kirim</th>
-                                    <th style="min-width: 80px;">Satuan</th>
-                                    <th style="min-width: 150px;">Catatan</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse ($lots as $idx => $lot)
-                                    @php
-                                        $rowOld = $oldLines[$idx] ?? [];
-                                        $oldQty = $rowOld['qty'] ?? '';
-                                        $oldUom = $rowOld['uom'] ?? $lot->uom;
-                                        $oldNotes = $rowOld['notes'] ?? '';
-                                    @endphp
-                                    <tr>
-                                        {{-- CHECK --}}
-                                        <td class="text-center">
-                                            <input type="checkbox" class="form-check-input line-check"
-                                                data-stock="{{ (float) $lot->stock_remain }}"
-                                                {{ (float) $oldQty > 0 ? 'checked' : '' }}>
-                                            {{-- hidden lot & item --}}
-                                            <input type="hidden" name="lines[{{ $idx }}][lot_id]"
-                                                value="{{ $lot->id }}">
-                                            <input type="hidden" name="lines[{{ $idx }}][item_id]"
-                                                value="{{ $lot->item_id }}">
-                                        </td>
-
-                                        {{-- LOT CODE --}}
-                                        <td class="mono small">
-                                            {{ $lot->lot_code }}
-                                        </td>
-
-                                        {{-- ITEM --}}
-                                        <td>
-                                            <div class="mono small">
-                                                {{ $lot->item_code }} {{ $lot->item_name }}
-                                            </div>
-                                        </td>
-
-                                        {{-- STOK SISA --}}
-                                        <td class="text-end">
-                                            <span class="badge-stock mono">
-                                                {{ number_format($lot->stock_remain, 2) }}
-                                            </span>
-                                        </td>
-
-                                        {{-- QTY KIRIM --}}
-                                        <td>
-                                            <input type="number" step="0.01" min="0"
-                                                name="lines[{{ $idx }}][qty]"
-                                                class="form-control form-control-sm text-end mono line-qty"
-                                                data-stock="{{ (float) $lot->stock_remain }}"
-                                                value="{{ $oldQty !== '' ? $oldQty : '' }}">
-                                        </td>
-
-                                        {{-- UOM --}}
-                                        <td>
-                                            <input type="text" name="lines[{{ $idx }}][uom]"
-                                                class="form-control form-control-sm text-center mono"
-                                                value="{{ $oldUom }}">
-                                        </td>
-
-                                        {{-- NOTES --}}
-                                        <td>
-                                            <input type="text" name="lines[{{ $idx }}][notes]"
-                                                class="form-control form-control-sm" value="{{ $oldNotes }}">
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="7" class="text-center text-muted small">
-                                            Tidak ada LOT untuk gudang ini.
-                                            Pilih gudang lain di atas untuk melihat LOT lain.
-                                        </td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                        @error('lines')
+                            <div class="text-danger small mt-2">{{ $message }}</div>
+                        @enderror
                     </div>
+                </div>
+            </div>
 
-                    @error('lines')
-                        <div class="text-danger small mt-2">{{ $message }}</div>
-                    @enderror
+            {{-- DETAIL BUNDLE CUTTING --}}
+            <div id="bundle-section" class="{{ $oldTransferType === 'sewing_bundle' ? '' : 'd-none' }}">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <div class="fw-semibold small text-uppercase">Pilih Bundle (hasil QC Cutting)</div>
+                                <div class="help mt-1">
+                                    Centang bundle yang mau dikirim ke WIP-SEW. Default qty = qty_ok tersedia.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-wrap">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width:40px" class="text-center">
+                                            <input type="checkbox" class="form-check-input" id="bundle-check-all">
+                                        </th>
+                                        <th style="min-width:150px">Bundle</th>
+                                        <th style="min-width:200px">Item</th>
+                                        <th class="text-end" style="min-width:90px">Qty OK</th>
+                                        <th class="text-end" style="min-width:100px">Sisa Kirim</th>
+                                        <th class="text-end" style="min-width:120px">Qty Kirim</th>
+                                        <th style="min-width:150px">Catatan</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bundle-lines-body">
+                                    @forelse ($bundles as $idx => $bundle)
+                                        @php
+                                            $available = $bundle->availableQtyForSewing();
+                                            $rowOld = $oldBundleLines[$idx] ?? [];
+                                            $oldQty = $rowOld['qty'] ?? '';
+                                            $oldNotes = $rowOld['notes'] ?? '';
+                                            $checked = (float) $oldQty > 0;
+                                        @endphp
+                                        <tr>
+                                            <td class="text-center">
+                                                <input type="checkbox" class="form-check-input bundle-check"
+                                                    data-available="{{ $available }}" {{ $checked ? 'checked' : '' }}>
+                                                <input type="hidden"
+                                                    name="bundle_lines[{{ $idx }}][cutting_bundle_id]"
+                                                    value="{{ $bundle->id }}"
+                                                    class="bundle-id" {{ $checked ? '' : 'disabled' }}>
+                                            </td>
+                                            <td class="mono small">{{ $bundle->bundle_code ?? $bundle->id }}</td>
+                                            <td>
+                                                <div class="mono small">{{ $bundle->item?->code }}</div>
+                                                <div class="small text-muted">{{ $bundle->item?->name }}</div>
+                                            </td>
+                                            <td class="text-end mono">{{ number_format((float) $bundle->qty_ok, 2) }}</td>
+                                            <td class="text-end mono">{{ number_format($available, 2) }}</td>
+                                            <td>
+                                                <input type="number" step="0.01" min="0"
+                                                    name="bundle_lines[{{ $idx }}][qty]"
+                                                    class="form-control form-control-sm text-end mono bundle-qty"
+                                                    data-available="{{ $available }}"
+                                                    value="{{ $oldQty !== '' ? $oldQty : '' }}" {{ $checked ? '' : 'disabled' }}>
+                                            </td>
+                                            <td>
+                                                <input type="text" name="bundle_lines[{{ $idx }}][notes]"
+                                                    class="form-control form-control-sm bundle-notes"
+                                                    value="{{ $oldNotes }}" {{ $checked ? '' : 'disabled' }}>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted small">Belum ada bundle QC Done.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @error('bundle_lines')
+                            <div class="text-danger small mt-2">{{ $message }}</div>
+                        @enderror
+                    </div>
                 </div>
             </div>
 
@@ -354,6 +454,11 @@
             const toWhDisplay = document.getElementById('to-warehouse-code-display');
             const tbody = document.querySelector('#lines-table tbody');
             const checkAll = document.getElementById('check-all');
+            const transferTypeSelect = document.getElementById('transfer-type-select');
+            const materialSection = document.getElementById('material-section');
+            const bundleSection = document.getElementById('bundle-section');
+            const bundleTbody = document.getElementById('bundle-lines-body');
+            const bundleCheckAll = document.getElementById('bundle-check-all');
 
             function mapProcessToCode(proc) {
                 switch ((proc || '').toLowerCase()) {
@@ -370,11 +475,31 @@
                 }
             }
 
+            function syncTransferTypeUI() {
+                const isBundle = transferTypeSelect && transferTypeSelect.value === 'sewing_bundle';
+
+                if (materialSection) {
+                    materialSection.classList.toggle('d-none', isBundle);
+                }
+                if (bundleSection) {
+                    bundleSection.classList.toggle('d-none', !isBundle);
+                }
+
+                if (isBundle && procSelect) {
+                    procSelect.value = 'sewing';
+                }
+            }
+
             function updateAutoToWarehouse() {
                 if (!procSelect || !opSelect || !toWhDisplay) return;
 
                 const proc = (procSelect.value || '').trim();
                 const opCode = (opSelect.value || '').trim();
+
+                if (transferTypeSelect && transferTypeSelect.value === 'sewing_bundle') {
+                    toWhDisplay.value = 'WIP-SEW';
+                    return;
+                }
 
                 if (!proc || !opCode) {
                     toWhDisplay.value = '';
@@ -420,11 +545,13 @@
                 const whId = fromWhSelect.value || '';
                 const proc = procSelect ? procSelect.value : '';
                 const op = opSelect ? opSelect.value : '';
+                const type = transferTypeSelect ? transferTypeSelect.value : '';
 
                 const url = new URL("{{ route('inventory.external_transfers.create') }}", window.location.origin);
                 if (whId) url.searchParams.set('from_warehouse_id', whId);
                 if (proc) url.searchParams.set('process', proc);
                 if (op) url.searchParams.set('operator_code', op);
+                if (type) url.searchParams.set('transfer_type', type);
 
                 window.location.href = url.toString();
             }
@@ -517,33 +644,114 @@
                 syncHeaderCheckbox();
             }
 
+            function initBundleCheckboxes() {
+                if (!bundleTbody) return;
+
+                function syncHeader() {
+                    if (!bundleCheckAll) return;
+                    const list = bundleTbody.querySelectorAll('.bundle-check');
+                    const checked = Array.from(list).filter(c => c.checked).length;
+                    if (list.length === 0) {
+                        bundleCheckAll.checked = false;
+                        bundleCheckAll.indeterminate = false;
+                        return;
+                    }
+                    if (checked === 0) {
+                        bundleCheckAll.checked = false;
+                        bundleCheckAll.indeterminate = false;
+                    } else if (checked === list.length) {
+                        bundleCheckAll.checked = true;
+                        bundleCheckAll.indeterminate = false;
+                    } else {
+                        bundleCheckAll.indeterminate = true;
+                    }
+                }
+
+                bundleTbody.addEventListener('change', function(e) {
+                    if (!e.target.classList.contains('bundle-check')) return;
+                    const chk = e.target;
+                    const tr = chk.closest('tr');
+                    const qtyInput = tr.querySelector('.bundle-qty');
+                    const hiddenId = tr.querySelector('.bundle-id');
+                    const noteInput = tr.querySelector('.bundle-notes');
+                    const available = parseFloat(chk.dataset.available || '0') || 0;
+
+                    [qtyInput, hiddenId, noteInput].forEach(el => {
+                        if (!el) return;
+                        el.disabled = !chk.checked;
+                    });
+
+                    if (chk.checked && qtyInput && (!qtyInput.value || parseFloat(qtyInput.value || '0') <= 0)) {
+                        qtyInput.value = available;
+                    }
+                    if (!chk.checked && qtyInput) {
+                        qtyInput.value = '';
+                    }
+
+                    syncHeader();
+                });
+
+                bundleTbody.addEventListener('input', function(e) {
+                    if (!e.target.classList.contains('bundle-qty')) return;
+                    const qtyInput = e.target;
+                    const tr = qtyInput.closest('tr');
+                    const chk = tr.querySelector('.bundle-check');
+                    const available = parseFloat(qtyInput.dataset.available || '0') || 0;
+                    const val = parseFloat(qtyInput.value || '0') || 0;
+
+                    if (val > available) {
+                        qtyInput.value = available;
+                    }
+                    if (chk) {
+                        chk.checked = val > 0;
+                    }
+
+                    syncHeader();
+                });
+
+                if (bundleCheckAll) {
+                    bundleCheckAll.addEventListener('change', function() {
+                        const list = bundleTbody.querySelectorAll('.bundle-check');
+                        list.forEach(chk => {
+                            chk.checked = bundleCheckAll.checked;
+                            chk.dispatchEvent(new Event('change'));
+                        });
+                        bundleCheckAll.indeterminate = false;
+                    });
+                }
+
+                syncHeader();
+            }
+
             function initFormSubmission() {
                 const form = document.querySelector('form');
-                if (!form || !tbody) return;
+                if (!form) return;
 
                 form.addEventListener('submit', function(e) {
-                    const rows = tbody.querySelectorAll('tr');
+                    const isBundle = transferTypeSelect && transferTypeSelect.value === 'sewing_bundle';
+                    const targetBody = isBundle ? bundleTbody : tbody;
+                    if (!targetBody) return;
+
+                    const rows = targetBody.querySelectorAll('tr');
                     let selectedCount = 0;
 
                     rows.forEach(tr => {
-                        const chk = tr.querySelector('.line-check');
+                        const chk = tr.querySelector(isBundle ? '.bundle-check' : '.line-check');
                         if (!chk) return;
+
+                        const inputs = tr.querySelectorAll('input, select, textarea');
 
                         if (chk.checked) {
                             selectedCount++;
+                            inputs.forEach(el => (el.disabled = false));
                         } else {
-                            // baris tidak dipilih → disable input2 supaya tidak terkirim
-                            tr.querySelectorAll('input, select, textarea').forEach(el => {
-                                // jangan disable lot_id & item_id kalau mau tetap diproses backend,
-                                // tapi di skenario ini kita disable semua untuk baris tak terpilih
-                                el.disabled = true;
-                            });
+                            inputs.forEach(el => (el.disabled = true));
                         }
                     });
 
                     if (selectedCount === 0) {
                         e.preventDefault();
-                        alert('Pilih minimal satu LOT yang akan dikirim.');
+                        alert('Pilih minimal satu detail yang akan dikirim.');
                     }
                 });
             }
@@ -558,13 +766,23 @@
                     updateAutoToWarehouse();
                 });
 
+                transferTypeSelect?.addEventListener('change', () => {
+                    syncTransferTypeUI();
+                    if (transferTypeSelect.value === 'sewing_bundle') {
+                        procSelect.value = 'sewing';
+                    }
+                    updateAutoToWarehouse();
+                });
+
                 fromWhSelect?.addEventListener('change', () => {
                     reloadByWarehouseChange();
                 });
 
                 rebuildOperatorOptions();
+                syncTransferTypeUI();
                 updateAutoToWarehouse();
                 initLotCheckboxes();
+                initBundleCheckboxes();
                 initFormSubmission();
             }
 

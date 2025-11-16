@@ -27,6 +27,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
                     ->name('show');
                 Route::get('/{transfer}/edit', [ExternalTransferController::class, 'edit'])->name('edit');
                 Route::put('/{transfer}', [ExternalTransferController::class, 'update'])->name('update');
+                Route::post('/{transfer}/receive', [ExternalTransferController::class, 'receive'])->name('receive');
             });
 
         // ------------------------

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\ExternalTransferBundleLine;
 use App\Models\ExternalTransferLine;
 use App\Models\ProductionBatch;
 use App\Models\Warehouse;
@@ -14,6 +15,10 @@ class ExternalTransfer extends Model
         'from_warehouse_id',
         'to_warehouse_id',
         'date',
+        'process',
+        'operator_code',
+        'transfer_type',
+        'direction',
         'status',
         'notes',
         'created_by',
@@ -36,6 +41,11 @@ class ExternalTransfer extends Model
     public function lines()
     {
         return $this->hasMany(ExternalTransferLine::class);
+    }
+
+    public function bundleLines()
+    {
+        return $this->hasMany(ExternalTransferBundleLine::class);
     }
 
     public function productionBatch()

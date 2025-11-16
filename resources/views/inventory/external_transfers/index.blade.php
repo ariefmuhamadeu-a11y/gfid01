@@ -56,6 +56,7 @@
                                 </td>
                                 <td>
                                     <span class="fw-semibold">{{ $t->code }}</span>
+                                    <div class="small text-muted">{{ $t->transfer_type === 'sewing_bundle' ? 'Sewing Bundle' : 'Material' }}</div>
                                 </td>
                                 <td>{{ $t->fromWarehouse->code }}</td>
                                 <td>{{ $t->toWarehouse->code }}</td>
@@ -106,17 +107,18 @@
                 @endphp
 
                 <div class="mb-2 p-3 rounded-3" style="background: var(--card); border: 1px solid var(--line);">
-                    <div class="d-flex justify-content-between align-items-start mb-1">
-                        <div>
-                            <div class="small text-muted">
-                                {{ $t->date->format('d/m/Y') }}
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <div>
+                                <div class="small text-muted">
+                                    {{ $t->date->format('d/m/Y') }}
+                                </div>
+                                <div class="fw-semibold">
+                                    {{ $t->code }}
+                                </div>
+                                <div class="small text-muted">{{ $t->transfer_type === 'sewing_bundle' ? 'Sewing Bundle' : 'Material' }}</div>
                             </div>
-                            <div class="fw-semibold">
-                                {{ $t->code }}
-                            </div>
+                            <span class="badge {{ $class }}">{{ $label }}</span>
                         </div>
-                        <span class="badge {{ $class }}">{{ $label }}</span>
-                    </div>
 
                     <div class="small text-muted mb-2">
                         {{ $t->fromWarehouse->code }} → {{ $t->toWarehouse->code }}
