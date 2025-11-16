@@ -98,17 +98,17 @@
                 </div>
             </div>
             <div class="text-end">
-                <a href="{{ route('external-transfers.index') }}" class="btn btn-outline-secondary btn-sm mb-1">
+                <a href="{{ route('production.external_transfers.index') }}" class="btn btn-outline-secondary btn-sm mb-1">
                     <i class="bi bi-arrow-left me-1"></i> Kembali
                 </a>
 
                 {{-- Aksi tergantung status --}}
                 @if ($row->status === 'draft')
-                    <a href="{{ route('external-transfers.edit', $row) }}" class="btn btn-outline-secondary btn-sm mb-1">
+                    <a href="{{ route('production.external_transfers.edit', $row) }}" class="btn btn-outline-secondary btn-sm mb-1">
                         <i class="bi bi-pencil me-1"></i> Edit
                     </a>
 
-                    <form action="{{ route('external-transfers.send', $row) }}" method="post" class="d-inline"
+                    <form action="{{ route('production.external_transfers.send', $row) }}" method="post" class="d-inline"
                         onsubmit="return confirm('Kirim dokumen ini?')">
                         @csrf
                         <button class="btn btn-primary btn-sm mb-1" type="submit">
@@ -116,7 +116,7 @@
                         </button>
                     </form>
 
-                    <form action="{{ route('external-transfers.destroy', $row) }}" method="post" class="d-inline"
+                    <form action="{{ route('production.external_transfers.destroy', $row) }}" method="post" class="d-inline"
                         onsubmit="return confirm('Hapus dokumen draft ini?')">
                         @csrf
                         @method('delete')
@@ -125,7 +125,7 @@
                         </button>
                     </form>
                 @elseif($row->status === 'sent')
-                    <form action="{{ route('external-transfers.receive', $row) }}" method="post" class="d-inline"
+                    <form action="{{ route('production.external_transfers.receive', $row) }}" method="post" class="d-inline"
                         onsubmit="return confirm('Konfirmasi barang sudah diterima?')">
                         @csrf
                         <button class="btn btn-success btn-sm mb-1" type="submit">
@@ -133,7 +133,7 @@
                         </button>
                     </form>
                 @elseif(in_array($row->status, ['received', 'sent']))
-                    <form action="{{ route('external-transfers.done', $row) }}" method="post" class="d-inline"
+                    <form action="{{ route('production.external_transfers.done', $row) }}" method="post" class="d-inline"
                         onsubmit="return confirm('Tandai dokumen ini selesai?')">
                         @csrf
                         <button class="btn btn-outline-success btn-sm mb-1" type="submit">

@@ -28,7 +28,9 @@ class SewingQcController extends Controller
 
     public function update(Request $request, CuttingBundle $bundle)
     {
-        $remaining = max(0, (float) ($bundle->qty_ok ?? 0) - (float) ($bundle->qty_sewn_ok ?? 0) - (float) ($bundle->qty_sewn_reject ?? 0));
+        $totalForQc = (float) ($bundle->qty_ok ?? $bundle->qty_cut ?? 0);
+        $alreadyQc = (float) ($bundle->qty_sewn_ok ?? 0) + (float) ($bundle->qty_sewn_reject ?? 0);
+        $remaining = max(0, $totalForQc - $alreadyQc);
 
         $data = $request->validate([
             'qty_ok' => ['required', 'numeric', 'min:0'],
@@ -50,16 +52,18 @@ class SewingQcController extends Controller
             'cutting_bundle_id' => $bundle->id,
             'external_transfer_id' => $data['external_transfer_id'] ?? null,
             'qc_date' => now()->toDateString(),
-            'qty_input' => $remaining,
+            'qty_input' => $qtyOk + $qtyReject,
             'qty_ok' => $qtyOk,
             'qty_reject' => $qtyReject,
             'note' => $data['note'] ?? null,
         ]);
 
+        $remainingAfterQc = max(0, $totalForQc - ($alreadyQc + $qtyOk + $qtyReject));
+
         $bundle->update([
             'qty_sewn_ok' => (float) $bundle->qty_sewn_ok + $qtyOk,
             'qty_sewn_reject' => (float) $bundle->qty_sewn_reject + $qtyReject,
-            'sewing_status' => 'sewing_qc_done',
+            'sewing_status' => $remainingAfterQc > 0 ? 'in_sewing' : 'sewing_qc_done',
         ]);
 
         // TODO: hubungkan ke InventoryService / Finishing jika sudah siap

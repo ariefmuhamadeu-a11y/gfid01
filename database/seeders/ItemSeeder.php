@@ -55,6 +55,18 @@ class ItemSeeder extends Seeder
                 'uom' => 'pcs',
                 'type' => 'finished',
             ],
+            [
+                'code' => 'K7BLK',
+                'name' => 'K7 Black',
+                'uom' => 'pcs',
+                'type' => 'finished',
+            ],
+            [
+                'code' => 'K5BLK',
+                'name' => 'K5 Black',
+                'uom' => 'pcs',
+                'type' => 'finished',
+            ],
         ];
 
         foreach ($items as $item) {

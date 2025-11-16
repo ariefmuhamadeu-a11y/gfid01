@@ -78,7 +78,7 @@
                 </div>
             </div>
             <div>
-                <a href="{{ route('external-transfers.show', $row) }}" class="btn btn-outline-secondary btn-sm">
+                <a href="{{ route('production.external_transfers.show', $row) }}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-arrow-left me-1"></i> Kembali
                 </a>
             </div>
@@ -95,7 +95,7 @@
             </div>
         @endif
 
-        <form action="{{ route('external-transfers.update', $row) }}" method="post">
+        <form action="{{ route('production.external_transfers.update', $row) }}" method="post">
             @csrf
             @method('put')
 

@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Production\CuttingBundleController;
+use App\Http\Controllers\Production\ExternalTransferController;
 use App\Http\Controllers\Production\FinishingController;
 use App\Http\Controllers\Production\VendorCuttingController;
 use App\Http\Controllers\Production\WipCuttingQcController;
@@ -10,6 +12,20 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
 
     Route::prefix('production')->name('production.')->group(function () {
+        Route::prefix('external-transfers')->name('external_transfers.')
+            ->group(function () {
+                Route::get('/', [ExternalTransferController::class, 'index'])->name('index');
+                Route::get('/create', [ExternalTransferController::class, 'create'])->name('create');
+                Route::post('/', [ExternalTransferController::class, 'store'])->name('store');
+                Route::get('/{externalTransfer}', [ExternalTransferController::class, 'show'])->name('show');
+                Route::get('/{externalTransfer}/edit', [ExternalTransferController::class, 'edit'])->name('edit');
+                Route::put('/{externalTransfer}', [ExternalTransferController::class, 'update'])->name('update');
+                Route::post('/{externalTransfer}/send', [ExternalTransferController::class, 'send'])->name('send');
+                Route::post('/{externalTransfer}/receive', [ExternalTransferController::class, 'receive'])->name('receive');
+                Route::post('/{externalTransfer}/done', [ExternalTransferController::class, 'done'])->name('done');
+                Route::delete('/{externalTransfer}', [ExternalTransferController::class, 'destroy'])->name('destroy');
+            });
+
         Route::prefix('vendor-cutting')->name('vendor_cutting.')
             ->group(function () {
 
@@ -34,6 +50,15 @@ Route::middleware(['auth', 'role:cutting,admin'])->group(function () {
                 Route::post('/batches/{batch}/send-to-qc', [VendorCuttingController::class, 'sendToQc'])
                     ->name('batches.send_to_qc');
 
+            });
+
+        Route::prefix('cutting-bundles')->name('cutting_bundles.')
+            ->group(function () {
+                Route::get('/', [CuttingBundleController::class, 'index'])->name('index');
+                Route::get('/batches/{batch}/create', [CuttingBundleController::class, 'create'])
+                    ->name('create');
+                Route::post('/batches/{batch}', [CuttingBundleController::class, 'store'])
+                    ->name('store');
             });
 
         // QC Cutting (WIP)
